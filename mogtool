@@ -713,6 +713,12 @@ MSG
             return;
         }
 
+        # drop other memory references we're not using anymore
+        foreach my $chunknum (keys %chunkbuf) {
+            next if $chunknum == $cn;
+            delete $chunkbuf{$chunknum};
+        }
+
         # as a child, get a new mogile connection
         my $mogfs = get_mogfs();
         my $dkey = $opts{big} ? "$key,$chunknum" : "$key";
