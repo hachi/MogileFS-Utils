@@ -520,10 +520,11 @@ sub inject {
     }
 
     # now do some pre-file checking...
+    my $size = -s $src;
     if ($type ne 'file') {
         die "Error: you specified to store a file of type $type but didn't specify --bigfile.  Please see documentation.\n"
             unless $opts{big};
-    } elsif (-s $src > 64 * 1024 * 1024) {
+    } elsif ($size > 64 * 1024 * 1024) {
         die "Error: the file is more than 64MB and you didn't specify --bigfile.  Please see documentation.\n"
             unless $opts{big};
     }
@@ -699,6 +700,9 @@ MSG
                 unless $status == Z_OK;
             $readbuf = $out;
             $rv = length $readbuf;
+
+            # we don't always get a chunk from deflate
+            next unless $rv;
         }
 
         # now stick our data into our real buffer
@@ -706,7 +710,13 @@ MSG
         $bufsize += $rv;
         $sum += $rv;
         $readbuf = '';
-        print "Buffer so far: $bufsize bytes\r";
+
+        # generate output
+        if ($type ne 'tarball' && $size && $size > $read_size) {
+            printf "Buffer so far: $bufsize bytes [%.2f%% complete]\r", ($sum / $size * 100);
+        } else {
+            print "Buffer so far: $bufsize bytes\r";
+        }
 
         # if we have one chunk, handle it
         if ($bufsize >= $chunk_size) {
