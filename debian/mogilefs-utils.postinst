@@ -1,0 +1,9 @@
+#!/bin/sh
+
+if [ ! -e /etc/mogilefs/ ]
+	then
+		mkdir -p /etc/mogilefs
+		cp /usr/share/mogilefs-utils/mogtool.conf.default /etc/mogilefs/mogtool.conf
+fi
+
+#DEBHELPER#

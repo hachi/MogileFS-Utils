@@ -1,0 +1,13 @@
+Source: mogilefs-utils
+Section: perl
+Priority: optional
+Maintainer: Jay Bonci <jaybonci@debian.org>
+Build-Depends-Indep: debhelper (>= 4.1.40), perl (>= 5.6.0-16), libcompress-zlib-perl, libwww-perl, libmogilefs-perl
+Standards-Version: 3.6.1.0
+
+Package: mogilefs-utils
+Architecture: all
+Depends: ${perl:Depends}, libcompress-zlib-perl, libwww-perl, libmogilefs-perl
+Description: utilities to manipulate mogileFS filesystems
+ The mogilefs-utils package contains tools to administrate and work with the 
+ mogileFS filesystem from Danga Interactive.
