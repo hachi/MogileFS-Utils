@@ -96,7 +96,7 @@ List all big files contained in MogileFS.  No options, no arguments.
 
 The following options are used to control the behavior of the injector.
 
-=over4
+=over 4
 
 =item --bigfile|-b
 
@@ -519,6 +519,7 @@ foreach my $conf (@confs) {
     next unless $conf && -e $conf;
     open FILE, "<$conf";
     foreach (<FILE>) {
+        s!#.*!!;
         next unless m!(\w+)\s*=\s*(.+)!;
         $opts{$1} = $2;
     }
