@@ -3,13 +3,34 @@
 
 =head1 NAME
 
-mogtool -- Inject/extract data from a MogileFS installation
+mogtool -- Inject/extract data to/from a MogileFS installation
 
 =head1 SYNOPSIS
 
-  $ mogtool [opts] <command> [command-opts] [command-args]
+    $ mogtool [general-opts] <command> [command-opts] <command-args>
 
-=head1 OPTIONS
+    $ mogtool --trackers=127.0.0.1:6001 --domain=foo --class=bar ...
+    $ mogtool --conf=foo.conf ...
+
+    $ mogtool inject thefile.tgz thefilekey
+    $ mogtool inject --bigfile thebigfile.tgz thefilekey
+    $ mogtool inject --bigfile --gzip thebigfile.tar thefilekey
+    $ mogtool inject --bigfile --gzip mydirectory thedirkey
+    $ mogtool inject --bigfile --gzip /dev/hda4 thedevkey
+
+    $ mogtool inject --bigfile --gzip --verify \
+                     --description="Description" \
+                     --receipt="foo@bar.com, baz@bar.com" \
+                     --concurrent=5 --chunksize=32M \
+                     somehugefile thefilekey
+
+    $ mogtool extract thefilekey thenewfile.tgz
+    $ mogtool extract thefilekey -
+    $ mogtool extract --bigfile thedirkey .
+    $ mogtool extract --bigfile --asfile thedirkey thefile.tgz
+    $ mogtool extract --bigfile thedevkey /dev/hda4
+
+=head1 GENERAL OPTIONS
 
 =over 4
 
@@ -33,13 +54,7 @@ Set the class within the domain to use.  Defaults to _default.
 
 Specify a configuration file to load from.
 
-=item --bigfile|-b
-
-If specified, use chunking to break large files into 64MB chunks.
-
-=item --gzip|-z
-
-Use gzip compression on store/retrieve.
+=back
 
 =head1 COMMANDS
 
@@ -47,18 +62,335 @@ Use gzip compression on store/retrieve.
 
 =item inject|i
 
-Insert a file into MogileFS.
+Insert a resource into MogileFS.  See L</"INJECT OPTIONS"> and L</"INJECT ARGUMENTS">
+for the rest of how to use the inject mode.
 
 =item extract|x
 
-Extract a file from MogileFS.
+Extract a resource from MogileFS.  See L</"EXTRACT OPTIONS"> and L</"EXTRACT ARGUMENTS">
+for how to use extract.
+
+=back
+
+=head1 INJECT OPTIONS
+
+The following options are used to control the behavior of the injector.
+
+=over4
+
+=item --bigfile|-b
+
+If specified, use chunking to break the resource into manageable pieces.
+
+=item --chunksize=<size>[B|K|M|G]
+
+When instructed to break files into chunks, the injector will use the specified
+chunk size as the maximum chunk size.  Defaults to 64M.  You can specify the
+chunk size manually and specify the units--defaults to bytes.
+
+=item --gzip|-z
+
+If specified, mogtool will gzip the data as it's going into MogileFS.  The resource
+will be marked as compressed.
+
+Note that you do not need to specify this if the resource is already gzipped, but
+it doesn't hurt.  (We automatically detect that and mark it as compressed.)
+
+=item --overwrite
+
+If you previously were working on injecting a big file as chunks and the process
+died, normally mogtool refuses to do it again.  Specify this option to force the
+overwrite of that file.
+
+B<NOTE:> Other than in the above case (partial failure), mogtool will not prompt
+before overwriting an existing file.
+
+=item --verify
+
+If on, we do a full MD5 verification of every chunk after it is replicated.  This
+can take a while on large files!
+
+=item --description=<text>
+
+Specifies a description for this file.  Optional, but assists in reporting and
+listing the large files in MogileFS.  (This is also displayed in any receipts
+that are created.)
+
+=item --receipt=<email address>[, <email address>]*
+
+If specified, emails a copy of the receipt file to the specified comma-separated
+email addresses.  Also creates a local filesystem copy of the receipt file.
+
+=item --concurrent=<number>
+
+Specifies the number of concurrent processes to run for MogileFS insertion.  If
+you are noticing mogtool spend most of it's time waiting for children and not
+actually buffering data, you may wish to raise this number.  The default is 1
+but we've found 3 or 4 work well.
+
+=item 
+
+=back
+
+=head1 INJECT ARGUMENTS
+
+=over 4
+
+=item resource
+
+What you actually want to inject.  This can be a file, directory, or a raw
+partition in the format I</dev/X>.
+
+Please see L</"USAGE EXAMPLES"> for more information on how to inject these
+different types of resources and the differences thereof.
+
+=item key
+
+Specifies the key to save this file to.  For big files, the key is actually
+"_big_N:key" and "key,#" where N is one of a bunch of things we use and # is
+the chunk number.
+
+Generally, you want this to be descriptive so you remember what it is later
+and can identify the file just by looking at the key.
+
+=back
+
+=head1 EXTRACT OPTIONS
+
+=over 4
+
+=item --bigfile|-b
+
+If specified, indicates that this resource was chunked on injection and should be
+reassembled for extraction.
+
+=item --gzip|-z
+
+Specifies to mogtool that it should ungzip the output if and only if it was
+compressed when inserted into the MogileFS system.  So, if you're extracting a
+file that wasn't gzipped to begin with, this doesn't do anything.
+
+=item --asfile
+
+Useful when extracting something previously inserted as a directory--this option
+instructs mogtool to treat the resource as a file and not actually run it
+through tar for decompression.
+
+=back
+
+=head1 EXTRACT ARGUMENTS
+
+=over 4
+
+=item key
+
+Specifies the key to get the file from.
+
+=item destination
+
+What destination means varies depending on what type of resource you're extracting.
+However, no matter what, you can specify a single dash (B<->) to mean STDOUT.
+
+Please see the usage examples for more information on how extract works.
+
+=back
+
+=head1 USAGE EXAMPLES
+
+I<Please note that all examples assume you have a default config file that
+contains the tracker and domain to use.  Saves us from having to clutter up
+the command line.>
+
+=head2 Small Files (<64MB)
+
+When it comes to using small files, mogtool is very, very easy.
+
+=head3 Injection
+
+    $ mogtool inject foo.dbm foo.dbm.2004.12
+
+Injects the file I<foo.dbm> into MogileFS under the key of I<foo.dbm.2004.12>.
+
+    $ mogtool inject --gzip foo.dbm foo.dbm.2004.12
+
+Injects the same file to the same key, but compresses it on the fly for you.
+
+=head3 Extraction
+
+    $ mogtool extract foo.dbm.2004.12 newfoo.dbm
+
+Retrieves the key I<foo.dbm.2004.12> and saves it as I<newfoo.dbm>.
+
+    $ mogtool extract --gzip foo.dbm.2004.12 newfoo.dbm
+
+Gets the file and automatically decompresses it, if and only if it was compressed.
+So basically, you can turn on gzip in your config file and mogtool will do the
+smart thing each time.
+
+    $ mogtool extract foo.dbm.2004.12 -
+
+Print the resource to standard out.  If you want, you can pipe it somewhere or
+redirect to a file (but why not just specify the filename?).
+
+=head2 Large Files (>64MB)
+
+Given mogtool's ability to break files into chunks and later reassemble them,
+inserting large files (even files over the 4GB barrier) is relatively easy.
+
+=head3 Injection
+
+    $ mogtool inject --bigfile largefile.dat largefile.dat
+
+As expected, inserts the file I<largefile.dat> into the MogileFS system under
+the name I<largefile.dat>.  Not very creative.  Uses the default 64MB chunks.
+
+    $ mogtool inject --bigfile --chunksize=16M largefile.dat largefile.dat
+
+Specify to use 16MB chunks instead of the default.  Otherwise, the same.
+
+    $ mogtool inject --bigfile --chunksize=1000K --gzip largefile.dat somekey
+
+Do it again, but specify 1000KB chunks, gzip automatically, and upload it under
+a different key I<somekey>.
+
+    $ mogtool inject --bigfile --concurrent=5 --gzip largefile.dat somekey
+
+Same as above, but use 5 children processes for uploading chunks to MogileFS.
+This can take up to 300MB of memory in this example!  (It tends to use about
+(concurrency + 1) * chunksize bytes.)
+
+    $ mogtool inject --bigfile --chunksize=32M --concurrent=3 --gzip \
+              --receipt="foo@bar.com" --verify --description="A large file" \
+              largefile.dat somekey
+
+Break this file into 128MB chunks, set a description, use 3 children to
+upload them, gzip the file as you go, do a full MD5 verification of every
+chunk, then email a receipt with all of the MogileFS paths to me.
+
+Lots of flexibility with mogtool.
+
+=head3 Extraction
+
+    $ mogtool extract --bigfile somekey newfile.dat
+
+In its basic form, extracts the previously inserted large file and saves it as
+I<newfile.dat>.
+
+    $ mogtool extract --bigfile --gzip somekey newfile.dat
+
+If the file was gzipped on entry, ungzip it and save the result.  If it wasn't
+gzipped, then we just save it.
+
+=head2 Directories
+
+Directories are easily injected and extracted with mogtool.  To create the data
+stream that is inserted into MogileFS, we use tar.
+
+=head3 Injection
+
+    $ mogtool inject --bigfile mydir mykey
+
+Run I<mydir> through tar and then save it as I<mykey>.
+
+    $ mogtool inject --bigfile --gzip --concurrent=5 mydir mykey
+
+Inject, but also gzip and use multiple injectors.
+
+I<Note how this is just like injecting a large file.  See injection examples for
+large files for more examples.>
+
+=head3 Extraction
+
+    $ mogtool extract --bigfile mykey .
+
+Extract the previously injected directory I<mykey> to your local directory.
+
+    $ mogtool extract --bigfile --asfile mykey foo.tar
+
+Take the previously generated tarball and save it as I<foo.tar>.  Simply creates
+the file instead of extracting everything inside.
+
+=head2 Partitions/Devices
+
+mogtool has the ability to inject raw partitions into MogileFS and to retrieve
+them later and write them back to a partition.  They're treated just like directories
+for the most part, we just don't pipe things through tar.
+
+=head3 Injection
+
+    $ mogtool inject --bigfile /dev/hda3 hda3.backup
+
+Save a raw copy of your partition I</dev/hda3> to the key I<hda3.backup>.
+
+    $ mogtool inject --bigfile --gzip /dev/hda3 hda3.backup
+
+Same, but compress on the fly during injection.
+
+=head3 Extraction
+
+    $ mogtool extract --bigfile hda3.backup /dev/hda4
+
+Extract the partition at I<hda3.backup> to the partition I</dev/hda4>.  B<WARNING:>
+mogtool won't ask for confirmation, make sure you don't mistype partition numbers!
+
+=head1 CONFIGURATION FILE
+
+Instead of adding a ton of options to the command line every time, mogtool enables
+you to create a default configuration file that it will read all of the options from.
+It searches two locations for a default configuration file: B<~/.mogtool> and
+B</etc/mogilefs/mogtool.conf>.  (Alternately, you can specify B<--conf=whatever> as
+an option on the command line.)
+
+The file can consist of any number of the following items:
+
+    trackers = 10.0.0.3:7001, 10.0.0.5:7001
+    domain = mogiledomain
+    class = fileclass
+    gzip = 1
+    big = 1
+    overwrite = 1
+    chunksize = 32M
+    receipt = foo@bar.com, baz@bar.com
+    verify = 1
+    concurrent = 3
+
+=head1 KNOWN BUGS
+
+None?  Send me any you find!  :)
+
+=head1 PLANNED FEATURES
+
+=over 4
+
+=item --concurrent for extract
+
+It would be nice to have concurrent extraction going on.
+
+=item recover mode
+
+If the receipt file is ever corrupt in MogileFS it would be useful to recover a
+file given just a receipt.  It would have the same arguments as the extract mode,
+except use a receipt file as the data source.
+
+=item partition size verification
+
+We can easily get the partition size when we save one to MogileFS, so we should
+use that information to determine during extraction if a target partition is going
+to be big enough.
+
+=item on the fly gzip extraction
+
+Right now we can gzip on an injection, but we should support doing decompression
+on the fly coming out of MogileFS.
 
 =back
 
 =head1 AUTHOR
 
-Brad Fitzpatrick E<lt>brad@danga.comE<gt>
-Mark Smith E<lt>junior@danga.comE<gt>
+Mark Smith E<lt>junior@danga.comE<gt> - most of the implementation and maintenance.
+
+Brad Fitzpatrick E<lt>brad@danga.comE<gt> - concepts and rough draft.
+
 Copyright (c) 2002-2004 Danga Interactive. All rights reserved.
 
 =cut
@@ -101,16 +433,19 @@ abortWithUsage() unless
                'reciept=s'     => \$opts{receipt}, # requested :)
                'verify'        => \$opts{verify},
                'description=s' => \$opts{des},
-               'concurrent=i'  => \$opts{numkids},
+               'concurrent=i'  => \$opts{concurrent},
+
+               # extract options
+               'asfile'        => \$opts{asfile},
                );
 
 # now load the config file?
-if ($opts{conf}) {
-    die "Config file ($opts{conf}) not found\n"
-        unless -e $opts{conf};
-    open FILE, "<$opts{conf}";
+my @confs = ( $opts{conf}, "$ENV{HOME}/.mogtool", "/etc/mogilefs/mogtool.conf" );
+foreach my $conf (@confs) {
+    next unless $conf && -e $conf;
+    open FILE, "<$conf";
     foreach (<FILE>) {
-        next unless m!(\w+)\s*=\s*(.+?)!;
+        next unless m!(\w+)\s*=\s*(.+)!;
         $opts{$1} = $2;
     }
     close FILE;
@@ -314,12 +649,12 @@ MSG
     };
 
     # this function handles parallel threads
-    $opts{numkids} ||= 1;
-    $opts{numkids} = 1 if $opts{numkids} < 1;
+    $opts{concurrent} ||= 1;
+    $opts{concurrent} = 1 if $opts{concurrent} < 1;
     my $handle_children = sub {
         # here we pause while our children are working
         my $first = 1;
-        while ($first || scalar(keys %children) >= $opts{numkids}) {
+        while ($first || scalar(keys %children) >= $opts{concurrent}) {
             $first = 0;
             $reap_children->();
             select undef, undef, undef, 0.1;
@@ -329,33 +664,66 @@ MSG
         foreach my $cnum (keys %chunkbuf) {
             next if $chunksout{$cnum};
             $emit->($cnum);
-            last if scalar(keys %children) >= $opts{numkids};
+            last if scalar(keys %children) >= $opts{concurrent};
         }
     };
 
+    # setup compression stuff
+    my $dogzip = 0;
+    my $zlib;
+    if ($opts{gzip}) {
+        # if they turned gzip on we may or may not need this stream, so make it
+        $zlib = deflateInit()
+            or die "Error: unable to create gzip deflation stream\n";
+    }
+
     # read one meg chunks while we have data
     my $sum = 0;
-    while (my $rv = read(O, $buf, $read_size, $bufsize)) {
+    my $readbuf = '';
+    while (my $rv = read(O, $readbuf, $read_size)) {
+        # if this is a file, and this is our first read, see if it's gzipped
+        if (!$sum && $rv >= 2) {
+            if (substr($readbuf, 0, 2) eq "\x1f\x8b") {
+                # this is already gzipped, so just mark it as such and insert it
+                $opts{gzip} = 1;
+            } else {
+                # now turn on our gzipping if the user wants the output gzipped
+                $dogzip = 1 if $opts{gzip};
+            }
+        }
+
+        # now run it through the deflation stream before we process it here
+        if ($dogzip) {
+            my ($out, $status) = $zlib->deflate($readbuf);
+            die "Error: Deflation failure processing stream\n"
+                unless $status == Z_OK;
+            $readbuf = $out;
+            $rv = length $readbuf;
+        }
+
+        # now stick our data into our real buffer
+        $buf .= $readbuf;
         $bufsize += $rv;
         $sum += $rv;
+        $readbuf = '';
         print "Buffer so far: $bufsize bytes\r";
 
         # if we have one chunk, handle it
         if ($bufsize >= $chunk_size) {
-            $chunkbuf{++$chunknum} = $buf;
+            $chunkbuf{++$chunknum} = substr($buf, 0, $chunk_size);
 
             # calculate the md5, print out status, and save this chunk
             my $md5 = md5_hex($buf);
             if ($opts{big}) {
-                print "chunk $key,$chunknum: $md5, len = $bufsize\n";
+                print "chunk $key,$chunknum: $md5, len = $chunk_size\n";
             } else {
-                print "file $key: $md5, len = $bufsize\n";
+                print "file $key: $md5, len = $chunk_size\n";
             }
-            $chunkinfo{$chunknum} = [ $md5, $bufsize ];
+            $chunkinfo{$chunknum} = [ $md5, $chunk_size ];
 
             # reset for the next read loop
-            $buf = '';
-            $bufsize = 0;
+            $buf = substr($buf, $chunk_size);
+            $bufsize = length $buf;
 
             # now spawn children to save chunks
             $handle_children->();
@@ -363,8 +731,19 @@ MSG
     }
     close O;
 
+    # now we need to flush the gzip engine
+    if ($dogzip) {
+        my ($out, $status) = $zlib->flush;
+        die "Error: Deflation failure processing stream\n"
+            unless $status == Z_OK;
+        $buf .= $out;
+        $bufsize += length $out;
+        $sum += length $out;
+    }
+
     # final piece
     if ($buf) {
+        print "doing final piece\n";
         $chunkbuf{++$chunknum} = $buf;
         my $md5 = md5_hex($buf);
         if ($opts{big}) {
@@ -390,7 +769,8 @@ MSG
 
         # now iterate over each and get the paths
         foreach my $num (keys %still_need) {
-            my @npaths = $mogfs->get_paths("$key,$num", 1);
+            my $dkey = $opts{big} ? "$key,$num" : $key;
+            my @npaths = $mogfs->get_paths($dkey, 1);
             if (scalar(@npaths) >= 2) {
                 # okay, this one's replicated, actually verify the paths
                 foreach my $path (@npaths) {
@@ -561,7 +941,7 @@ sub extract {
         *O = *STDOUT;
     } else {
         # open up O as the handle to use for reading data
-        if ($type eq 'file' || $type eq 'partition') {
+        if ($type eq 'file' || $type eq 'partition' || ($type eq 'tarball' && $opts{asfile})) {
             # just write it to the file with this name, but don't overwrite?
             if ($dest eq '.') {
                 $dest = $filename;
