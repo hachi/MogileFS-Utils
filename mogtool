@@ -30,6 +30,10 @@ mogtool -- Inject/extract data to/from a MogileFS installation
     $ mogtool extract --bigfile --asfile thedirkey thefile.tgz
     $ mogtool extract --bigfile thedevkey /dev/hda4
 
+    $ mogtool delete thekey
+
+    $ mogtool list
+
 =head1 GENERAL OPTIONS
 
 =over 4
@@ -54,6 +58,12 @@ Set the class within the domain to use.  Defaults to _default.
 
 Specify a configuration file to load from.
 
+=item --lib=<directory>
+
+Specify a directory to use as a library path.  Right now, this should
+be the directory where you expect to find the MogileFS.pm file, if it's
+not actually installed.
+
 =back
 
 =head1 COMMANDS
@@ -69,6 +79,14 @@ for the rest of how to use the inject mode.
 
 Extract a resource from MogileFS.  See L</"EXTRACT OPTIONS"> and L</"EXTRACT ARGUMENTS">
 for how to use extract.
+
+=item delete|rm
+
+Delete a resource.  See L</"DELETE OPTIONS"> and L</"DELETE ARGUMENTS">.
+
+=item list|ls
+
+List all big files contained in MogileFS.  No options, no arguments.
 
 =back
 
@@ -192,6 +210,26 @@ What destination means varies depending on what type of resource you're extracti
 However, no matter what, you can specify a single dash (B<->) to mean STDOUT.
 
 Please see the usage examples for more information on how extract works.
+
+=back
+
+=head1 DELETE OPTIONS
+
+=over 4
+
+=item --bigfile|-b
+
+The resource is a "big file" and all chunks should be deleted.
+
+=back
+
+=head1 DELETE ARGUMENTS
+
+=over 4
+
+=item key
+
+Specifies the key of the file to delete.
 
 =back
 
@@ -333,6 +371,26 @@ Same, but compress on the fly during injection.
 Extract the partition at I<hda3.backup> to the partition I</dev/hda4>.  B<WARNING:>
 mogtool won't ask for confirmation, make sure you don't mistype partition numbers!
 
+=head2 Deleting a Resource
+
+B<WARNING:> Please make sure you're specifying the right parameter, as delete does
+not prompt for confirmation of the request!
+
+    $ mogtool delete thekey
+
+Delete a normal file.
+
+    $ mogtool delete --bigfile thekey
+
+Delete a chunked file--this deletes all chunks and the receipt, so the file is gone.
+
+=head2 Listing Big Files
+
+    $ mogtool list backup
+
+Lists all large files stored in MogileFS.  It is not possible to list all normal files
+at this time.
+
 =head1 CONFIGURATION FILE
 
 Instead of adding a ton of options to the command line every time, mogtool enables
@@ -346,6 +404,7 @@ The file can consist of any number of the following items:
     trackers = 10.0.0.3:7001, 10.0.0.5:7001
     domain = mogiledomain
     class = fileclass
+    lib = /home/foo/lib
     gzip = 1
     big = 1
     overwrite = 1
@@ -383,6 +442,17 @@ to be big enough.
 Right now we can gzip on an injection, but we should support doing decompression
 on the fly coming out of MogileFS.
 
+=item make list take a prefix
+
+If you can specify a prefix, that makes things easier for finding small files that
+are stored in MogileFS.
+
+=item more information on list
+
+Have list load up the info file and parse it for information about each of the
+big files being stored.  Maybe have this as an option (-l).  (This means the
+reading and parsing of info files should be abstracted into a function.)
+
 =back
 
 =head1 AUTHOR
@@ -398,7 +468,6 @@ Copyright (c) 2002-2004 Danga Interactive. All rights reserved.
 ##############################################################################
 
 use strict;
-use MogileFS;
 use Getopt::Long;
 use Pod::Usage qw{ pod2usage };
 use Digest::MD5 qw{ md5_hex };
@@ -421,6 +490,7 @@ abortWithUsage() unless
                'config=s'      => \$opts{conf},
                'help'          => \$opts{help},
                'debug'         => \$MogileFS::DEBUG,
+               'lib'           => \$opts{lib},
 
                # extract+inject options
                'gzip|z'        => \$opts{gzip},
@@ -451,6 +521,12 @@ foreach my $conf (@confs) {
     close FILE;
 }
 
+# now bring in MogileFS, because hopefully we have a lib by now
+if ($opts{lib}) {
+    eval "use lib '$opts{lib}';";
+}
+eval "use MogileFS;";
+
 # no trackers and domain..?
 unless ($opts{trackers} && $opts{domain}) {
     abortWithUsage();
@@ -464,6 +540,7 @@ my $cmd = shift;
 inject() if $cmd eq 'i' || $cmd eq "inject";
 extract() if $cmd eq 'x' || $cmd eq "extract";
 list() if $cmd eq 'ls' || $cmd eq "list";
+mdelete() if $cmd eq 'rm' || $cmd eq "delete";
 
 # fail if we get this far
 abortWithUsage();
@@ -1022,6 +1099,30 @@ sub extract {
 
     # now check
     exit 0;
+}
+
+sub list {
+    # list all big files in mogile
+    my ($ct, $after, $list);
+    while (($after, $list) = $mogfs->list_keys("_big_info:", $after)) {
+        last unless $list && @$list;
+
+        # now extract the key and dump it
+        foreach my $key (@$list) {
+            next unless $key =~ /^_big_info:(.+)$/;
+
+            $key = $1;
+            $ct++;
+
+            print "$key\n";
+        }
+    }
+    print "\n$ct files found\n";
+    exit 0;
+}
+
+sub mdelete {
+    die "not implemented yet\n";
 }
 
 abortWithUsage() if $opts{help};
