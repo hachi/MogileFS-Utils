@@ -383,48 +383,46 @@ MSG
 
     # verify replication and chunks
     my %paths; # { chunknum => [ path, path, path ... ] }
-    if ($opts{verify} || $opts{receipt}) {
-        my %still_need = ( %chunkinfo );
-        while (%still_need) {
-            print "Beginning verify loop: " . join(' ', sort { $a <=> $b } keys %still_need) . "\n";
-            sleep 1; # give things time to replicate some
+    my %still_need = ( %chunkinfo );
+    while (%still_need) {
+        print "Beginning replication wait: " . join(' ', sort { $a <=> $b } keys %still_need) . "\n";
+        sleep 1; # give things time to replicate some
 
-            # now iterate over each and get the paths
-            foreach my $num (keys %still_need) {
-                my @npaths = $mogfs->get_paths("$key,$num", 1);
-                if (scalar(@npaths) >= 2) {
-                    # okay, this one's replicated, actually verify the paths
-                    foreach my $path (@npaths) {
-                        if ($opts{verify}) {
-                            print "       Verifying chunk $num, path $path...";
-                            my $data = get($path);
-                            my $len = length($data);
-                            my $md5 = md5_hex($data);
-                            if ($md5 ne $chunkinfo{$num}->[0]) {
-                                print "md5 mismatch\n";
-                                next;
-                            } elsif ($len != $chunkinfo{$num}->[1]) {
-                                print "length mismatch ($len, $chunkinfo{$num}->[1])\n";
-                                next;
-                            }
-                            print "ok\n";
-                        } elsif ($opts{receipt}) {
-                            # just do a quick size check
-                            print "       Size verifying chunk $num, path $path...";
-                            my $clen = (head($path))[1] || 0;
-                            unless ($clen == $chunkinfo{$num}->[1]) {
-                                print "length mismatch ($clen, $chunkinfo{$num}->[1])\n";
-                                next;
-                            }
-                            print "ok\n";
+        # now iterate over each and get the paths
+        foreach my $num (keys %still_need) {
+            my @npaths = $mogfs->get_paths("$key,$num", 1);
+            if (scalar(@npaths) >= 2) {
+                # okay, this one's replicated, actually verify the paths
+                foreach my $path (@npaths) {
+                    if ($opts{verify}) {
+                        print "       Verifying chunk $num, path $path...";
+                        my $data = get($path);
+                        my $len = length($data);
+                        my $md5 = md5_hex($data);
+                        if ($md5 ne $chunkinfo{$num}->[0]) {
+                            print "md5 mismatch\n";
+                            next;
+                        } elsif ($len != $chunkinfo{$num}->[1]) {
+                            print "length mismatch ($len, $chunkinfo{$num}->[1])\n";
+                            next;
                         }
-                        push @{$paths{$num} ||= []}, $path;
+                        print "ok\n";
+                    } elsif ($opts{receipt}) {
+                        # just do a quick size check
+                        print "       Size verifying chunk $num, path $path...";
+                        my $clen = (head($path))[1] || 0;
+                        unless ($clen == $chunkinfo{$num}->[1]) {
+                            print "length mismatch ($clen, $chunkinfo{$num}->[1])\n";
+                            next;
+                        }
+                        print "ok\n";
                     }
-
-                    # now make sure %paths contains at least 2 verified
-                    next unless scalar(@{$paths{$num} || []}) >= 2;
-                    delete $still_need{$num};
+                    push @{$paths{$num} ||= []}, $path;
                 }
+
+                # now make sure %paths contains at least 2 verified
+                next unless scalar(@{$paths{$num} || []}) >= 2;
+                delete $still_need{$num};
             }
         }
     }
@@ -456,7 +454,7 @@ INFO
             or die "ERROR: Unable to create _big_info:$key\n";
         $fhinfo->print($info);
         $fhinfo->close()
-            or die "ERROR: Unable to save _bif_info:$key\n";
+            or die "ERROR: Unable to save _big_info:$key\n";
 
         # verify info file
         print "Waiting for info file replication...\n";
@@ -511,8 +509,8 @@ sub extract {
     die "Error: key $key isn't valid; must not contain spaces or commas.\n"
         unless $key =~ /^[^\s\,]+$/;
     unless ($dest eq '-' || $dest eq '.') {
-        abortWithUsage("Error: destination exists: $dest (specify --overwrite if you want to kill it)")
-            if -e $dest && !$opts{overwrite};
+        die "Error: destination exists: $dest (specify --overwrite if you want to kill it)"
+            if -e $dest && !$opts{overwrite} && !-b $dest;
     }
 
     # see if this is really a big file
@@ -549,8 +547,13 @@ sub extract {
         $type = 'file';
         $maxnum = 1;
         $parts{1} = {
-            paths => [ $mogfs->get_paths($key) ],
+            paths => [ grep { defined $_ } $mogfs->get_paths($key) ],
         };
+
+        # now, if it doesn't exist..
+        unless (scalar(@{$parts{1}->{paths}})) {
+            die "Error: file doesn't exist (or did you forget --bigfile?)\n";
+        }
     }
 
     # several cases.. going to stdout?
@@ -559,17 +562,17 @@ sub extract {
     } else {
         # open up O as the handle to use for reading data
         if ($type eq 'file' || $type eq 'partition') {
-            # one check, if this is a partition, verify free space
-            if ($type eq 'partition') {
-                die "Error: haven't implemented this yet...\n";
-            }
-
             # just write it to the file with this name, but don't overwrite?
             if ($dest eq '.') {
                 $dest = $filename;
                 $dest =~ s!^(.+)/!!;
             }
-            if (-e $dest) {
+            if (-b $dest) {
+                # if we're targetting a block device...
+                warn "FIXME: add in block checking\n";
+                open O, ">$dest"
+                    or die "Couldn't open $dest: $!\n";
+            } elsif (-e $dest) {
                 if ($opts{overwrite}) {
                     open O, ">$dest"
                         or die "Couldn't open $dest: $!\n";
