@@ -1025,6 +1025,32 @@ MAIL
     exit 0;
 }
 
+sub _parse_info {
+    my $info = shift;
+    my $res = {};
+
+    # parse out the header data
+    $res->{des} = ($info =~ /^des\s+(.+)$/m) ? $1 : undef;
+    $res->{type} = ($info =~ /^type\s+(.+)$/m) ? $1 : undef;
+    $res->{compressed} = ($info =~ /^compressed\s+(.+)$/m) ? $1 : undef;
+    $res->{filename} = ($info =~ /^filename\s+(.+)$/m) ? $1 : undef;
+    $res->{chunks} = ($info =~ /^chunks\s+(\d+)$/m) ? $1 : undef;
+    $res->{size} = ($info =~ /^size\s+(\d+)$/m) ? $1 : undef;
+
+    # now get the pieces
+    $res->{maxnum} = undef;
+    while ($info =~ /^part\s+(\d+)\s+bytes=(\d+)\s+md5=(.+)\s+paths:\s+(.+)$/mg) {
+        $res->{maxnum} = $1 if !defined $res->{maxnum} || $1 > $res->{maxnum};
+        $res->{parts}->{$1} = {
+            bytes => $2,
+            md5 => $3,
+            paths => [ split(/\s*,\s*/, $4) ],
+        };
+    } 
+
+    return $res;
+}
+
 sub extract {
     my $key = shift @ARGV;
     my $dest = shift @ARGV;
@@ -1038,46 +1064,31 @@ sub extract {
     }
 
     # see if this is really a big file
-    my (%parts, $maxnum, $info, $des, $type, $compressed, $filename, $chunks, $size);
+    my $file;
     if ($opts{big}) {
-        $info = $mogfs->get_file_data("_big_info:$key");
+        my $info = $mogfs->get_file_data("_big_info:$key");
         die "$key doesn't seem to be a valid big file.\n"
             unless $info && $$info;
 
         # verify validity
-        $des = ($$info =~ /^des\s+(.+)$/m) ? $1 : undef;
-        $type = ($$info =~ /^type\s+(.+)$/m) ? $1 : undef;
-        $compressed = ($$info =~ /^compressed\s+(.+)$/m) ? $1 : undef;
-        $filename = ($$info =~ /^filename\s+(.+)$/m) ? $1 : undef;
-        $chunks = ($$info =~ /^chunks\s+(\d+)$/m) ? $1 : undef;
-        $size = ($$info =~ /^size\s+(\d+)$/m) ? $1 : undef;
+        $file = _parse_info($$info);
 
         # make sure we have enough info
         error("Error: info file doesn't contain the number of chunks", ERR_FATAL)
-            unless $chunks;
+            unless $file->{chunks};
         error("Error: info file doesn't contain the total size", ERR_FATAL)
-            unless $size;
-
-        # now get the pieces
-        while ($$info =~ /^part\s+(\d+)\s+bytes=(\d+)\s+md5=(.+)\s+paths:\s+(.+)$/mg) {
-            $maxnum = $1 if !defined $maxnum || $1 > $maxnum;
-            $parts{$1} = {
-                bytes => $2,
-                md5 => $3,
-                paths => [ split(/\s*,\s*/, $4) ],
-            };
-        }
+            unless $file->{size};
 
     } else {
         # not a big file, so it has to be of a certain type
-        $type = 'file';
-        $maxnum = 1;
-        $parts{1} = {
+        $file->{type} = 'file';
+        $file->{maxnum} = 1;
+        $file->{parts}->{1} = {
             paths => [ grep { defined $_ } $mogfs->get_paths($key) ],
         };
 
         # now, if it doesn't exist..
-        unless (scalar(@{$parts{1}->{paths}})) {
+        unless (scalar(@{$file->{parts}->{1}->{paths}})) {
             error("Error: file doesn't exist (or did you forget --bigfile?)", ERR_FATAL);
         }
     }
@@ -1087,10 +1098,11 @@ sub extract {
         *O = *STDOUT;
     } else {
         # open up O as the handle to use for reading data
-        if ($type eq 'file' || $type eq 'partition' || ($type eq 'tarball' && $opts{asfile})) {
+        if ($file->{type} eq 'file' || $file->{type} eq 'partition' ||
+            ($file->{type} eq 'tarball' && $opts{asfile})) {
             # just write it to the file with this name, but don't overwrite?
             if ($dest eq '.') {
-                $dest = $filename;
+                $dest = $file->{filename};
                 $dest =~ s!^(.+)/!!;
             }
             if (-b $dest) {
@@ -1110,21 +1122,21 @@ sub extract {
                     or die "Couldn't open $dest: $!\n";
             }
 
-        } elsif ($type eq 'tarball') {
-            my $taropts = ($compressed ? 'z' : '') . "xf";
+        } elsif ($file->{type} eq 'tarball') {
+            my $taropts = ($file->{compressed} ? 'z' : '') . "xf";
             open O, '|-', 'tar', $taropts, '-'
                 or die "Couldn't open tar for writing: $!\n";
 
         } else {
-            die "Error: unable to handle type '$type'\n";
+            die "Error: unable to handle type '$file->{type}'\n";
         }
     }
 
     # start fetching pieces
-    foreach my $i (1..$maxnum) {
+    foreach my $i (1..$file->{maxnum}) {
         print "Fetching piece $i...\n";
 
-        foreach my $path (@{$parts{$i}->{paths} || []}) {
+        foreach my $path (@{$file->{parts}->{$i}->{paths} || []}) {
             print "        Trying $path...\n";
             my $data = get($path);
             next unless $data;
@@ -1134,8 +1146,8 @@ sub extract {
                 my $len = length $data;
                 my $md5 = md5_hex($data);
                 print "                ($len bytes, $md5)\n";
-                next unless $len == $parts{$i}->{bytes} &&
-                            $md5 eq $parts{$i}->{md5};
+                next unless $len == $file->{parts}->{$i}->{bytes} &&
+                            $md5 eq $file->{parts}->{$i}->{md5};
             }
 
             # this chunk verified, write it out
