@@ -1,0 +1,699 @@
+#!/usr/bin/perl
+############################################################################
+
+=head1 NAME
+
+mogtool -- Inject/extract data from a MogileFS installation
+
+=head1 SYNOPSIS
+
+  $ mogtool [opts] <command> [command-opts] [command-args]
+
+=head1 OPTIONS
+
+=over 4
+
+=item --debug
+
+Turn on MogileFS debug output.
+
+=item --trackers=<ip:port>[,<ip:port>]*
+
+Specify one or more trackers for your MogileFS installation.
+
+=item --domain=<domain>
+
+Set the MogileFS domain to use.
+
+=item --class=<class>
+
+Set the class within the domain to use.  Defaults to _default.
+
+=item --conf=<file>
+
+Specify a configuration file to load from.
+
+=item --bigfile|-b
+
+If specified, use chunking to break large files into 64MB chunks.
+
+=item --gzip|-z
+
+Use gzip compression on store/retrieve.
+
+=head1 COMMANDS
+
+=over 4
+
+=item inject|i
+
+Insert a file into MogileFS.
+
+=item extract|x
+
+Extract a file from MogileFS.
+
+=back
+
+=head1 AUTHOR
+
+Brad Fitzpatrick E<lt>brad@danga.comE<gt>
+Mark Smith E<lt>junior@danga.comE<gt>
+Copyright (c) 2002-2004 Danga Interactive. All rights reserved.
+
+=cut
+
+##############################################################################
+
+use strict;
+use lib "$ENV{LJHOME}/cgi-bin";
+use MogileFS;
+use Getopt::Long;
+use Pod::Usage qw{ pod2usage };
+use Digest::MD5 qw{ md5_hex };
+use Time::HiRes qw{ gettimeofday tv_interval };
+use LWP::Simple;
+use POSIX qw(:sys_wait_h);
+
+$| = 1;
+
+my %opts;
+$opts{help} = 0;
+
+abortWithUsage() unless
+    GetOptions(
+               # general purpose options
+               'trackers'      => \$opts{trackers},
+               'gzip|z'        => \$opts{gzip},
+               'domain'        => \$opts{domain},
+               'class'         => \$opts{class},
+               'debug'         => \$MogileFS::DEBUG,
+               'conf'          => \$opts{conf},
+               'help'          => \$opts{help},
+
+               # inject options
+               'overwrite'     => \$opts{overwrite},
+               'chunksize=s'   => \$opts{chunksize},
+               'receipt=s'     => \$opts{receipt},
+               'reciept=s'     => \$opts{receipt}, # requested :)
+               'verify'        => \$opts{verify},
+               'description=s' => \$opts{des},
+               'concurrent=i'  => \$opts{numkids},
+               );
+
+# now load the config file?
+if ($opts{conf}) {
+    die "Config file ($opts{conf}) not found\n"
+        unless -e $opts{conf};
+    open FILE, "<$opts{conf}";
+    foreach (<FILE>) {
+        next unless m!(\w+)\s*=\s*(.+?)!;
+        $opts{$1} = $2;
+    }
+    close FILE;
+}
+
+# no trackers and domain..?
+unless ($opts{trackers} && $opts{domain}) {
+    abortWithUsage();
+}
+
+# init connection to mogile
+my $mogfs = get_mogfs();
+
+# get our command and pass off to our functions
+my $cmd = shift;
+inject() if $cmd eq 'i' || $cmd eq "inject";
+extract() if $cmd eq 'x' || $cmd eq "extract";
+list() if $cmd eq 'ls' || $cmd eq "list";
+abortWithUsage();
+
+######################################################################
+
+sub get_mogfs {
+    my $mogfs = MogileFS->new(
+                              domain => $opts{domain},
+                              hosts  => [ split(/\s*,\s*/, $opts{trackers}) ],
+                              )
+            or die "Could not initialize MogileFS\n";
+    return $mogfs;
+}
+
+sub inject {
+    my $src = shift @ARGV;
+    my $key = shift @ARGV;
+
+    abortWithUsage() unless -e $src && $key =~ /^[^\s\,]+$/;
+
+    # before we get too far, find sendmail?
+    my $sendmail;
+    if ($opts{receipt}) {
+        $sendmail = `which sendmail` || '/usr/sbin/sendmail';
+        $sendmail =~ s/[\r\n]+$//;
+        unless (-e $sendmail) {
+            die "Error: attempted to find sendmail binary in /usr/sbin but couldn't.\n";
+        }
+    }
+
+    # see if there's already a pre file?
+    my $data = $mogfs->get_file_data("_big_pre:$key");
+    if (defined $data) {
+        unless ($opts{overwrite}) {
+            die <<MSG;            
+ERROR: The pre-insert file for $key exists.  This indicates that a previous
+attempt to inject a file failed--or is still running elsewhere!  Please
+verify that a previous injection of this file is finished, or run mogtool
+again with the --overwrite inject option.
+
+$$data
+MSG
+        }
+
+        # delete the pre notice since we didn't die (overwrite must be on)
+        $mogfs->delete("_big_pre:$key")
+            or die "ERROR: Unable to delete _big_pre:$key.\n";
+    }
+
+    # now create our pre notice
+    my $prefh = $mogfs->new_file("_big_pre:$key")
+        or die "ERROR: Unable to create _big_pre:$key.\n";
+    $prefh->print("starttime:" . time());
+    unless ($prefh->close()) {
+        die "ERROR: Unable to save to _big_pre:$key: $@";
+    }
+
+    # open up O as the handle to use for reading data
+    my $type = 'unknown';
+    if (-d $src) {
+        my $taropts = ($opts{gzip} ? 'z' : '') . "cf";
+        $type = 'tarball';
+        open (O, '-|', 'tar', $taropts, '-', $src)
+            or die "Couldn't open tar for reading: $!\n";
+    } elsif (-f $src) {
+        $type = 'file';
+        open (O, "<$src")
+            or die "Couldn't open file for reading: $!\n";
+    } elsif (-b $src) {
+        $type = 'partition';
+        open (O, "<$src")
+            or die "Couldn't open block device for reading: $!\n";
+    } else {
+        die "Error: not file, directory, or partition.\n";
+    }
+
+    # setup config and temporary variables we're going to be using
+    my $chunk_size = 64 * 1024 * 1024;  # 64 MB
+    if ($opts{chunksize} && ($opts{chunksize} =~ m!^(\d+)(G|M|K|B)?!i)) {
+        $chunk_size = $1;
+        unless (lc $2 eq 'b') {
+            $chunk_size *= (1024 ** ( { g => 3, m => 2, k => 1 }->{lc $2} || 2 ));
+        }
+        print "NOTE: Using chunksize of $chunk_size bytes.\n";
+    }
+    my $read_size = ($chunk_size > 1024*1024 ? 1024*1024 : $chunk_size);
+
+    # temporary variables
+    my $buf;
+    my $bufsize = 0;
+    my $chunknum = 0;
+    my %chunkinfo; # { id => [ md5, length ] }
+    my %chunkbuf; # { id => data }
+    my %children; # { pid => chunknum }
+    my %chunksout; # { chunknum => pid }
+
+    # this function writes out a chunk
+    my $emit = sub {
+        my $cn = shift() + 0;
+        return unless $cn;
+
+        my $bufsize = length $chunkbuf{$cn};
+        return unless $bufsize;
+
+        # now spawn off a child to do the real work
+        if (my $pid = fork()) {
+            print "Spawned child $pid to deal with chunk number $cn.\n";
+            $chunksout{$cn} = $pid;
+            $children{$pid} = $cn;
+            return;
+        }
+
+        # as a child, get a new mogile connection
+        my $mogfs = get_mogfs();
+
+        # TODO: be resilient to transient errors, retry, etc.
+        my $start_time = [ gettimeofday() ];
+        my $try = 0;
+        while (1) {
+            $try++;
+            my $fh = $mogfs->new_file("$key,$chunknum");
+            unless (defined $fh) {
+                print "WARNING: Unable to create new file '$key,$chunknum'.\n";
+                printf "This was try #$try and it's been %.2f seconds since we first tried.  Retrying...\n", tv_interval($start_time);
+                sleep 1;
+                next;
+            }
+            $fh->print($chunkbuf{$cn});
+            unless ($fh->close) {
+                print "WARNING: Unable to save file '$key,$chunknum': $@";
+                printf "This was try #$try and it's been %.2f seconds since we first tried.  Retrying...\n", tv_interval($start_time);
+                sleep 1;
+                next;
+            }
+            last;
+        }
+        my $diff = tv_interval($start_time);
+        printf "        chunk saved in %.2f seconds.\n", $diff;
+
+        # make sure we never return, always exit
+        exit 0;
+    };
+
+    # just used to reap our children in a loop until they're done.  also
+    # handles respawning a child that failed.
+    my $reap_children = sub {
+        # find out if we have any kids dead
+        while ((my $pid = waitpid -1, WNOHANG) > 0) {
+            my $cnum = delete $children{$pid};
+            unless ($cnum) {
+                print "Error: reaped child $pid, but no idea what they were doing...\n";
+                next;
+            }
+            if (my $status = ($? >> 8)) {
+                print "Error: reaped child $pid for chunk $cnum returned status $status... Retrying...\n";
+                $emit->($cnum);
+                next;
+            }
+            delete $chunkbuf{$cnum};
+            delete $chunksout{$cnum};
+            print "Child $pid successfully finished with chunk $cnum.\n";
+        }
+    };
+
+    # this function handles parallel threads
+    $opts{numkids} ||= 1;
+    $opts{numkids} = 1 if $opts{numkids} < 1;
+    my $handle_children = sub {
+        # here we pause while our children are working
+        my $first = 1;
+        while ($first || scalar(keys %children) >= $opts{numkids}) {
+            $first = 0;
+            $reap_children->();
+            select undef, undef, undef, 0.1;
+        }
+
+        # now spawn until we hit the limit
+        foreach my $cnum (keys %chunkbuf) {
+            next if $chunksout{$cnum};
+            $emit->($cnum);
+            last if scalar(keys %children) >= $opts{numkids};
+        }
+    };
+
+    # read one meg chunks while we have data
+    my $sum = 0;
+    while (my $rv = read(O, $buf, $read_size, $bufsize)) {
+        $bufsize += $rv;
+        $sum += $rv;
+        print "Buffer so far: $bufsize bytes\r";
+
+        if ($bufsize >= $chunk_size) {
+            $chunkbuf{++$chunknum} = $buf;
+
+            my $md5 = md5_hex($buf);
+            print "chunk $key,$chunknum: $md5, len = $bufsize\n";
+            $chunkinfo{$chunknum} = [ $md5, $bufsize ];
+
+            $buf = '';
+            $bufsize = 0;
+
+            $handle_children->();
+        }
+    }
+    close O;
+
+    # final piece
+    if ($buf) {
+        $chunkbuf{++$chunknum} = $buf;
+        my $md5 = md5_hex($buf);
+        print "chunk $key,$chunknum: $md5, len = $bufsize\n";
+        $chunkinfo{$chunknum} = [ $md5, $bufsize ];
+    }
+
+    # now, while we still have chunks to process...
+    while (%chunkbuf) {
+        $handle_children->();
+        sleep 1;
+    }
+
+    # verify replication and chunks
+    my %paths; # { chunknum => [ path, path, path ... ] }
+    if ($opts{verify} || $opts{receipt}) {
+        my %still_need = ( %chunkinfo );
+        while (%still_need) {
+            print "Beginning verify loop: " . join(' ', sort { $a <=> $b } keys %still_need) . "\n";
+            sleep 1; # give things time to replicate some
+
+            # now iterate over each and get the paths
+            foreach my $num (keys %still_need) {
+                my @npaths = $mogfs->get_paths("$key,$num", 1);
+                if (scalar(@npaths) >= 2) {
+                    # okay, this one's replicated, actually verify the paths
+                    foreach my $path (@npaths) {
+                        if ($opts{verify}) {
+                            print "       Verifying chunk $num, path $path...";
+                            my $data = get($path);
+                            my $len = length($data);
+                            my $md5 = md5_hex($data);
+                            if ($md5 ne $chunkinfo{$num}->[0]) {
+                                print "md5 mismatch\n";
+                                next;
+                            } elsif ($len != $chunkinfo{$num}->[1]) {
+                                print "length mismatch ($len, $chunkinfo{$num}->[1])\n";
+                                next;
+                            }
+                            print "ok\n";
+                        } elsif ($opts{receipt}) {
+                            # just do a quick size check
+                            print "       Size verifying chunk $num, path $path...";
+                            my $clen = (head($path))[1] || 0;
+                            unless ($clen == $chunkinfo{$num}->[1]) {
+                                print "length mismatch ($clen, $chunkinfo{$num}->[1])\n";
+                                next;
+                            }
+                            print "ok\n";
+                        }
+                        push @{$paths{$num} ||= []}, $path;
+                    }
+
+                    # now make sure %paths contains at least 2 verified
+                    next unless scalar(@{$paths{$num} || []}) >= 2;
+                    delete $still_need{$num};
+                }
+            }
+        }
+    }
+
+    # prepare the info file
+    my $des = $opts{des} || 'no description';
+    my $compressed = $opts{gzip} ? '1' : '0';
+    #FIXME: add 'partblocks' to info file
+
+    # create the info file
+    my $info = <<INFO;
+des $des
+type $type
+compressed $compressed
+filename $src
+chunks $chunknum
+size $sum
+
+INFO
+    foreach (sort { $a <=> $b } keys %chunkinfo) {
+        $info .= "part $_ bytes=$chunkinfo{$_}->[1] md5=$chunkinfo{$_}->[0] paths: ";
+        $info .= join(', ', @{$paths{$_} || []});
+        $info .= "\n";
+    }
+
+    # now write out the info file
+    my $fhinfo = $mogfs->new_file("_big_info:$key")
+        or die "ERROR: Unable to create _big_info:$key\n";
+    $fhinfo->print($info);
+    $fhinfo->close()
+        or die "ERROR: Unable to save _bif_info:$key\n";
+
+    # verify info file
+    print "Waiting for info file replication...\n";
+    while (1) {
+        my @paths = $mogfs->get_paths("_big_info:$key", 1);
+        next unless scalar(@paths) >= 2;
+        foreach my $path (@paths) {
+            my $data = get($path);
+            die "       FATAL: content mismatch on $path\n"
+                unless $data eq $info;
+        }
+        last;
+    }
+
+    # now delete our pre file
+    print "Deleting pre-insert file...\n";
+    $mogfs->delete("_big_pre:$key")
+        or die "ERROR: Unable to delete _big_pre:$key\n";
+
+    # now email a receipt
+    if ($opts{receipt}) {
+        open MAIL, "| $sendmail -t"
+            or die "ERROR: Unable to open sendmail binary: $sendmail\n";
+        print MAIL <<MAIL;
+To: $opts{receipt}
+From: mogtool\@dev.null
+Subject: mogtool.$key.receipt
+
+$info
+.
+MAIL
+        close MAIL;
+        print "Receipt emailed.\n";
+
+        # now dump to a file
+        open FILE, ">mogtool.$key.receipt"
+            or die "ERROR: Unable to create file mogtool.$key.receipt in current directory.\n";
+        print FILE $info;
+        close FILE;
+        print "Receipt stored in mogtool.$key.receipt.\n";
+    }
+
+    exit 0;
+}
+
+sub extract {
+    my $key = shift @ARGV;
+    my $dest = shift @ARGV;
+
+    abortWithUsage() unless $key =~ /^[^\s\,]+$/;
+    unless ($dest eq '-' || $dest eq '.') {
+        abortWithUsage("Error: destination exists: $dest") if -e $dest;
+    }
+
+    # see if this is really a big file
+    my $info = $mogfs->get_file_data("_big_info:$key");
+    die "$key doesn't seem to be a valid big file.\n"
+        unless $info && $$info;
+
+    # verify validity
+    my ($des, $type, $compressed, $filename, $chunks, $size);
+    $des = ($$info =~ /^des\s+(.+)$/m) ? $1 : undef;
+    $type = ($$info =~ /^type\s+(.+)$/m) ? $1 : undef;
+    $compressed = ($$info =~ /^compressed\s+(.+)$/m) ? $1 : undef;
+    $filename = ($$info =~ /^filename\s+(.+)$/m) ? $1 : undef;
+    $chunks = ($$info =~ /^chunks\s+(\d+)$/m) ? $1 : undef;
+    $size = ($$info =~ /^size\s+(\d+)$/m) ? $1 : undef;
+
+    # make sure we have enough info
+    die "Error: info file doesn't contain the number of chunks\n" unless $chunks;
+    die "Error: info file doesn't contain the total size\n" unless $size;
+
+    # several cases.. going to stdout?
+    if ($dest eq '-') {
+        *O = *STDOUT;
+    } else {
+        # open up O as the handle to use for reading data
+        if ($type eq 'file' || $type eq 'partition') {
+            # one check, if this is a partition, verify free space
+            if ($type eq 'partition') {
+                die "Error: haven't implemented this yet...\n";
+            }
+
+            # just write it to the file with this name, but don't overwrite?
+            if ($dest eq '.') {
+                $dest = $filename;
+                $dest =~ s!^(.+)/!!;
+            }
+            if (-e $dest) {
+                if ($opts{overwrite}) {
+                    open O, ">$dest"
+                        or die "Couldn't open $dest: $!\n";
+                } else {
+                    die "File already exists: $dest ... won't overwrite without --overwrite.\n";
+                }
+            } else {
+                open O, ">$dest"
+                    or die "Couldn't open $dest: $!\n";
+            }
+
+        } elsif ($type eq 'tarball') {
+            my $taropts = ($compressed ? 'z' : '') . "xf";
+            open O, '|-', 'tar', $taropts, '-'
+                or die "Couldn't open tar for writing: $!\n";
+
+        } else {
+            die "Error: unable to handle type '$type'\n";
+        }
+    }
+
+    # now get the pieces
+    my %parts;
+    my $maxnum;
+    while ($$info =~ /^part\s+(\d+)\s+bytes=(\d+)\s+md5=(.+)\s+paths:\s+(.+)$/mg) {
+        $maxnum = $1 if !defined $maxnum || $1 > $maxnum;
+        $parts{$1} = {
+            bytes => $2,
+            md5 => $3,
+            paths => [ split(/\s*,\s*/, $4) ],
+        };
+    }
+
+    # start fetching pieces
+    foreach my $i (1..$maxnum) {
+        print "Fetching piece $i...\n";
+
+        foreach my $path (@{$parts{$i}->{paths} || []}) {
+            print "        Trying $path...\n";
+            my $data = get($path);
+            next unless $data;
+
+            # now verify MD5, etc
+            my $len = length $data;
+            my $md5 = md5_hex($data);
+            print "                ($len bytes, $md5)\n";
+            next unless $len == $parts{$i}->{bytes} &&
+                        $md5 eq $parts{$i}->{md5};
+
+            # this chunk verified, write it out
+            print O $data;
+            last;
+        }
+    }
+
+    # at this point the file should be complete!
+    close O;
+    print "Done.\n";
+
+    # now make sure we have enough data
+#$ mogtool [opts] extract <key> {<file>,<dir>,<device>}
+                                 #=>  -  (for stdout)    (if compressed, add "z" flag)
+                                 #=>  .   (to untar)     (if compressed, do nothing???, make .tar.gz file -- unless they use -z again?)
+                                 #=> /dev/sda4  (but check /proc/partitions that it's big enough)  (if compress, Compress::Zlib to ungzip
+#                                 => foo.jpg  (write it to a file)
+    
+
+    # now check
+    exit 0;
+}
+
+abortWithUsage() if $opts{help};
+
+
+sub abortWithUsage {
+    my $msg = join '', @_;
+
+    if ( $msg ) {
+        pod2usage( -verbose => 1, -exitval => 1, -message => "$msg" );
+    } else {
+        pod2usage( -verbose => 1, -exitval => 1 );
+    }
+}
+
+
+__END__
+
+Usage: mogtool [opts] <command> [command-opts] [command-args]
+
+General options:
+  * --trackers=<ip:port>[,<ip:port>]*
+
+  * --domain=<domain>
+
+  * --class=<class>
+
+  * --conf=<file>        Location of config file listing trackers, default
+	                 domain, and default class
+
+                         Default: ~/.mogilefs, /etc/mogilefs/mogilefs.conf
+
+  * --bigfile | -b       Tell mogtool to split file into 64MB chunks and 
+	                 checksum the chunks,
+
+  * --gzip    | -z       Use gzip compression/decompression
+
+
+Commands:
+
+  inject  | i      Inject a file into MogileFS, by key
+  extract | x      Extract a file from MogileFS, by key
+  list    | ls     List large files in MogileFS
+
+'inject' syntax:
+
+$ mogtool [opts] inject [i-opts] <file,dir,device> <key>
+
+Valid i-opts:
+    --overwrite    Ignore existing _big_pre: and start anew.
+    --chunksize=n  Set the size of individual chunk files.  n is in the format of
+                   number[scale] so 10 is 10 megabytes, 10M is also 10 megs, 10G, 10B, 10K...
+                   case insensitive
+    --receipt=email Send a receipt to the specified email address
+    --verify       Make sure things replicate and then check the MD5s?
+    --des=string   Set the file description
+                   
+
+$ mogtool [opts] extract <key> {<file>,<dir>,<device>}
+                                  =>  -  (for stdout)    (if compressed, add "z" flag)
+                                  =>  .   (to untar)     (if compressed, do nothing???, make .tar.gz file -- unless they use -z again?)
+                                  => /dev/sda4  (but check /proc/partitions that it's big enough)  (if compress, Compress::Zlib to ungzip)
+                                  => foo.jpg  (write it to a file)     
+
+
+--key
+
+# mogtool add --key='roast.sdb1.2004-11-07' -z /dev/sda1
+
+
+
+<key> = "cow.2004.11.17"
+
+# this is a temporary file that we delete when we're doing recording all chunks
+
+_big_pre:<key>
+
+    starttime=UNIXTIMESTAMP
+
+# when done, we write the _info file and delete the _pre.
+
+_big_info:<key>
+
+    des Cow's ljdb backup as of 2004-11-17
+    type  { partition, file, tarball }
+    compressed {0, 1}
+    filename  ljbinlog.305.gz
+    partblocks  234324324324
+    
+
+    part 1 <bytes> <md5hex>
+    part 2 <bytes> <md5hex>
+    part 3 <bytes> <md5hex>
+    part 4 <bytes> <md5hex>
+    part 5 <bytes> <md5hex>
+
+_big:<key>,<n>
+_big:<key>,<n>
+_big:<key>,<n>
+
+
+Receipt format:
+
+BEGIN MOGTOOL RECIEEPT
+type partition
+des Foo
+compressed foo
+
+part 1 bytes=23423432 md5=2349823948239423984 paths: http://dev5/2/23/23/.fid, http://dev6/23/423/4/324.fid
+part 1 bytes=23423432 md5=2349823948239423984 paths: http://dev5/2/23/23/.fid, http://dev6/23/423/4/324.fid
+part 1 bytes=23423432 md5=2349823948239423984 paths: http://dev5/2/23/23/.fid, http://dev6/23/423/4/324.fid
+part 1 bytes=23423432 md5=2349823948239423984 paths: http://dev5/2/23/23/.fid, http://dev6/23/423/4/324.fid
+
+
+END RECIEPT
+
+
+###
+perl -w bin/mogtool --gzip inject --overwrite --chunksize=24M --des="This is a description" --receipt="marksmith@danga.com" ../music/jesse/Unsorted jesse.music.unsorted
