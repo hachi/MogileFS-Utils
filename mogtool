@@ -745,6 +745,12 @@ MSG
                 $emit->($cnum);
                 next;
             }
+            my @paths = grep { defined $_ } $mogfs->get_paths($opts{big} ? "$key,$cnum" : "$key", 1);
+            unless (@paths) {
+                print "Error: reaped child $pid for chunk $cnum but no paths exist... Retrying...\n";
+                $emit->($cnum);
+                next;
+            }
             delete $chunkbuf{$cnum};
             delete $chunksout{$cnum};
             print "Child $pid successfully finished with chunk $cnum.\n";
