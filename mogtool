@@ -668,7 +668,7 @@ MSG
         }
 
         # now create our pre notice
-        my $prefh = $mogfs->new_file("_big_pre:$key")
+        my $prefh = $mogfs->new_file("_big_pre:$key", $opts{class})
             or error("ERROR: Unable to create _big_pre:$key.", ERR_FATAL);
         $prefh->print("starttime:" . time());
         $prefh->close()
@@ -722,7 +722,7 @@ MSG
         my $try = 0;
         while (1) {
             $try++;
-            my $fh = $mogfs->new_file($dkey);
+            my $fh = $mogfs->new_file($dkey, $opts{class});
             unless (defined $fh) {
                 error("WARNING: Unable to create new file '$dkey'.");
                 printf "This was try #$try and it's been %.2f seconds since we first tried.  Retrying...\n", tv_interval($start_time);
@@ -967,7 +967,7 @@ INFO
 
     # now write out the info file
     if ($opts{big}) {
-        my $fhinfo = $mogfs->new_file("_big_info:$key")
+        my $fhinfo = $mogfs->new_file("_big_info:$key", $opts{class})
             or error("ERROR: Unable to create _big_info:$key.", ERR_FATAL);
         $fhinfo->print($info);
         $fhinfo->close()
