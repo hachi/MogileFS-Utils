@@ -702,6 +702,7 @@ MSG
         my $cn = shift() + 0;
         return unless $cn;
 
+        # get the length of the chunk we're going to send
         my $bufsize = length $chunkbuf{$cn};
         return unless $bufsize;
 
@@ -728,7 +729,7 @@ MSG
         my $try = 0;
         while (1) {
             $try++;
-            my $fh = $mogfs->new_file($dkey, $opts{class});
+            my $fh = $mogfs->new_file($dkey, $opts{class}, $bufsize);
             unless (defined $fh) {
                 error("WARNING: Unable to create new file '$dkey'.");
                 printf "This was try #$try and it's been %.2f seconds since we first tried.  Retrying...\n", tv_interval($start_time);
