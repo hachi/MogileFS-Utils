@@ -478,6 +478,8 @@ use Compress::Zlib;
 
 $| = 1;
 
+use constant ERR_FATAL => 1;
+
 my %opts;
 $opts{help} = 0;
 
@@ -552,8 +554,32 @@ sub get_mogfs {
                               domain => $opts{domain},
                               hosts  => [ split(/\s*,\s*/, $opts{trackers}) ],
                               )
-            or die "Could not initialize MogileFS\n";
+            or error("Could not initialize MogileFS", ERR_FATAL);
     return $mogfs;
+}
+
+sub error {
+    my $err = shift() || "ERROR: no error message provided!";
+    print STDERR "$err\n";
+
+    if (my $errstr = $mogfs->errstr) {
+        $errstr =~ s/^\s+//;
+        $errstr =~ s/\s+$//;
+        if ($errstr) {
+            print STDERR "MogileFS backend error message: $errstr\n";
+        }
+    }
+
+    if ($@) {
+        my $err = $@;
+        $err =~ s/[\r\n]+$//;
+        print STDERR "System error message: $@\n";
+    }
+
+    # if a second argument, exit
+    if (defined (my $exitcode = shift())) {
+        exit $exitcode+0;
+    }
 }
 
 sub inject {
@@ -611,7 +637,7 @@ sub inject {
         my $data = $mogfs->get_file_data("_big_pre:$key");
         if (defined $data) {
             unless ($opts{overwrite}) {
-                die <<MSG;            
+                error(<<MSG, ERR_FATAL);
 ERROR: The pre-insert file for $key exists.  This indicates that a previous
 attempt to inject a file failed--or is still running elsewhere!  Please
 verify that a previous injection of this file is finished, or run mogtool
@@ -623,16 +649,15 @@ MSG
 
             # delete the pre notice since we didn't die (overwrite must be on)
             $mogfs->delete("_big_pre:$key")
-                or die "ERROR: Unable to delete _big_pre:$key.\n";
+                or error("ERROR: Unable to delete _big_pre:$key.", ERR_FATAL);
         }
 
         # now create our pre notice
         my $prefh = $mogfs->new_file("_big_pre:$key")
-            or die "ERROR: Unable to create _big_pre:$key.\n";
+            or error("ERROR: Unable to create _big_pre:$key.", ERR_FATAL);
         $prefh->print("starttime:" . time());
-        unless ($prefh->close()) {
-            die "ERROR: Unable to save to _big_pre:$key: $@";
-        }
+        $prefh->close()
+            or error("ERROR: Unable to save to _big_pre:$key.", ERR_FATAL);
     }
 
     # setup config and temporary variables we're going to be using
@@ -684,14 +709,14 @@ MSG
             $try++;
             my $fh = $mogfs->new_file($dkey);
             unless (defined $fh) {
-                print "WARNING: Unable to create new file '$dkey'.\n";
+                error("WARNING: Unable to create new file '$dkey'.");
                 printf "This was try #$try and it's been %.2f seconds since we first tried.  Retrying...\n", tv_interval($start_time);
                 sleep 1;
                 next;
             }
             $fh->print($chunkbuf{$cn});
             unless ($fh->close) {
-                print "WARNING: Unable to save file '$dkey': $@";
+                error("WARNING: Unable to save file '$dkey'.");
                 printf "This was try #$try and it's been %.2f seconds since we first tried.  Retrying...\n", tv_interval($start_time);
                 sleep 1;
                 next;
@@ -699,7 +724,7 @@ MSG
             last;
         }
         my $diff = tv_interval($start_time);
-        printf "        chunk saved in %.2f seconds.\n", $diff;
+        printf "        chunk $cn saved in %.2f seconds.\n", $diff;
 
         # make sure we never return, always exit
         exit 0;
@@ -715,8 +740,8 @@ MSG
                 print "Error: reaped child $pid, but no idea what they were doing...\n";
                 next;
             }
-            if (my $status = ($? >> 8)) {
-                print "Error: reaped child $pid for chunk $cnum returned status $status... Retrying...\n";
+            if (my $status = $?) {
+                print "Error: reaped child $pid for chunk $cnum returned non-zero status... Retrying...\n";
                 $emit->($cnum);
                 next;
             }
@@ -752,7 +777,7 @@ MSG
     if ($opts{gzip}) {
         # if they turned gzip on we may or may not need this stream, so make it
         $zlib = deflateInit()
-            or die "Error: unable to create gzip deflation stream\n";
+            or error("Error: unable to create gzip deflation stream", ERR_FATAL);
     }
 
     # read one meg chunks while we have data
@@ -773,7 +798,7 @@ MSG
         # now run it through the deflation stream before we process it here
         if ($dogzip) {
             my ($out, $status) = $zlib->deflate($readbuf);
-            die "Error: Deflation failure processing stream\n"
+            error("Error: Deflation failure processing stream", ERR_FATAL)
                 unless $status == Z_OK;
             $readbuf = $out;
             $rv = length $readbuf;
@@ -821,7 +846,7 @@ MSG
     # now we need to flush the gzip engine
     if ($dogzip) {
         my ($out, $status) = $zlib->flush;
-        die "Error: Deflation failure processing stream\n"
+        error("Error: Deflation failure processing stream", ERR_FATAL)
             unless $status == Z_OK;
         $buf .= $out;
         $bufsize += length $out;
@@ -830,7 +855,6 @@ MSG
 
     # final piece
     if ($buf) {
-        print "doing final piece\n";
         $chunkbuf{++$chunknum} = $buf;
         my $md5 = md5_hex($buf);
         if ($opts{big}) {
@@ -857,7 +881,12 @@ MSG
         # now iterate over each and get the paths
         foreach my $num (keys %still_need) {
             my $dkey = $opts{big} ? "$key,$num" : $key;
-            my @npaths = $mogfs->get_paths($dkey, 1);
+            my @npaths = grep { defined $_ } $mogfs->get_paths($dkey, 1);
+
+            unless (@npaths) {
+                error("FAILURE: chunk $num has no paths at all.", ERR_FATAL);
+            }
+
             if (scalar(@npaths) >= 2) {
                 # okay, this one's replicated, actually verify the paths
                 foreach my $path (@npaths) {
@@ -918,10 +947,10 @@ INFO
     # now write out the info file
     if ($opts{big}) {
         my $fhinfo = $mogfs->new_file("_big_info:$key")
-            or die "ERROR: Unable to create _big_info:$key\n";
+            or error("ERROR: Unable to create _big_info:$key.", ERR_FATAL);
         $fhinfo->print($info);
         $fhinfo->close()
-            or die "ERROR: Unable to save _big_info:$key\n";
+            or error("ERROR: Unable to save _big_info:$key.", ERR_FATAL);
 
         # verify info file
         print "Waiting for info file replication...\n";
@@ -930,7 +959,7 @@ INFO
             next unless scalar(@paths) >= 2;
             foreach my $path (@paths) {
                 my $data = get($path);
-                die "       FATAL: content mismatch on $path\n"
+                error("       FATAL: content mismatch on $path", ERR_FATAL)
                     unless $data eq $info;
             }
             last;
@@ -939,13 +968,13 @@ INFO
         # now delete our pre file
         print "Deleting pre-insert file...\n";
         $mogfs->delete("_big_pre:$key")
-            or die "ERROR: Unable to delete _big_pre:$key\n";
+            or error("ERROR: Unable to delete _big_pre:$key", ERR_FATAL);
     }
 
     # now email and save a receipt
     if ($opts{receipt}) {
         open MAIL, "| $sendmail -t"
-            or die "ERROR: Unable to open sendmail binary: $sendmail\n";
+            or error("ERROR: Unable to open sendmail binary: $sendmail", ERR_FATAL);
         print MAIL <<MAIL;
 To: $opts{receipt}
 From: mogtool\@dev.null
@@ -959,7 +988,7 @@ MAIL
 
         # now dump to a file
         open FILE, ">mogtool.$key.receipt"
-            or die "ERROR: Unable to create file mogtool.$key.receipt in current directory.\n";
+            or error("ERROR: Unable to create file mogtool.$key.receipt in current directory.", ERR_FATAL);
         print FILE $info;
         close FILE;
         print "Receipt stored in mogtool.$key.receipt.\n";
@@ -973,10 +1002,10 @@ sub extract {
     my $dest = shift @ARGV;
     abortWithUsage() unless $key && $dest;
 
-    die "Error: key $key isn't valid; must not contain spaces or commas.\n"
+    error("Error: key $key isn't valid; must not contain spaces or commas.", ERR_FATAL)
         unless $key =~ /^[^\s\,]+$/;
     unless ($dest eq '-' || $dest eq '.') {
-        die "Error: destination exists: $dest (specify --overwrite if you want to kill it)"
+        error("Error: destination exists: $dest (specify --overwrite if you want to kill it)", ERR_FATAL)
             if -e $dest && !$opts{overwrite} && !-b $dest;
     }
 
@@ -996,8 +1025,10 @@ sub extract {
         $size = ($$info =~ /^size\s+(\d+)$/m) ? $1 : undef;
 
         # make sure we have enough info
-        die "Error: info file doesn't contain the number of chunks\n" unless $chunks;
-        die "Error: info file doesn't contain the total size\n" unless $size;
+        error("Error: info file doesn't contain the number of chunks", ERR_FATAL)
+            unless $chunks;
+        error("Error: info file doesn't contain the total size", ERR_FATAL)
+            unless $size;
 
         # now get the pieces
         while ($$info =~ /^part\s+(\d+)\s+bytes=(\d+)\s+md5=(.+)\s+paths:\s+(.+)$/mg) {
@@ -1019,7 +1050,7 @@ sub extract {
 
         # now, if it doesn't exist..
         unless (scalar(@{$parts{1}->{paths}})) {
-            die "Error: file doesn't exist (or did you forget --bigfile?)\n";
+            error("Error: file doesn't exist (or did you forget --bigfile?)", ERR_FATAL);
         }
     }
 
