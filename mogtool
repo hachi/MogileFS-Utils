@@ -1148,7 +1148,7 @@ sub list {
             print "$key\n";
         }
     }
-    print "\n$ct files found\n";
+    print "#$ct files found\n";
     exit 0;
 }
 
