@@ -42,9 +42,11 @@ mogtool -- Inject/extract data to/from a MogileFS installation
 
 Turn on MogileFS debug output.
 
-=item --trackers=<ip:port>[,<ip:port>]*
+=item --trackers=<[preferred_ip/]ip:port>[,<[preferred_ip/]ip:port>]*
 
-Specify one or more trackers for your MogileFS installation.
+Specify one or more trackers for your MogileFS installation.  Note that
+you can specify preferred IPs to override the default IPs with.  So it
+would look something like B<10.10.0.1/10.0.0.1:8081>.
 
 =item --domain=<domain>
 
@@ -401,7 +403,7 @@ an option on the command line.)
 
 The file can consist of any number of the following items:
 
-    trackers = 10.0.0.3:7001, 10.0.0.5:7001
+    trackers = 10.0.0.3:7001, 10.10.0.5/10.0.0.5:7001
     domain = mogiledomain
     class = fileclass
     lib = /home/foo/lib
@@ -550,11 +552,24 @@ abortWithUsage();
 ######################################################################
 
 sub get_mogfs {
+    my @trackerinput = split(/\s*,\s*/, $opts{trackers});
+    my @trackers;
+    my %pref_ip;
+    foreach my $tracker (@trackerinput) {
+        if ($tracker =~ m!(.+)/(.+):(\d+)!) {
+            $pref_ip{$2} = $1;
+            push @trackers, "$2:$3";
+        } else {
+            push @trackers, $tracker;
+        }
+    }
+
     my $mogfs = MogileFS->new(
                               domain => $opts{domain},
-                              hosts  => [ split(/\s*,\s*/, $opts{trackers}) ],
+                              hosts  => \@trackers,
                               )
             or error("Could not initialize MogileFS", ERR_FATAL);
+    $mogfs->set_pref_ip(\%pref_ip);
     return $mogfs;
 }
 
