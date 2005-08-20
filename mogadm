@@ -1,0 +1,589 @@
+#!/usr/bin/perl
+###########################################################################
+## main program
+###########################################################################
+
+use strict;
+use Pod::Usage qw{ pod2usage };
+use Getopt::Long;
+use LWP::Simple;
+use Data::Dumper;
+use Socket;
+
+# get config options
+my (%opts, %int);
+Getopt::Long::Configure("pass_through");
+GetOptions(
+        "trackers=s" => \$opts{trackers},
+        "dbhost=s"   => \$opts{dbhost},
+        "dbuser=s"   => \$opts{dbuser},
+        "dbpass=s"   => \$opts{dbpass},
+        "dbname=s"   => \$opts{dbname},
+        "config=s"   => \$opts{config},
+        "lib=s"      => \$opts{lib},
+        "help"       => \$opts{help},
+    ) or abortWithUsage();
+
+# bail for help
+abortWithUsage() if $opts{help};
+
+# load up our config files
+my @configs = ($opts{config}, "$ENV{HOME}/.mogilefs.conf", "/etc/mogilefs/mogilefs.conf");
+foreach my $fn (reverse @configs) {
+    next unless -e $fn;
+    open FILE, "<$fn"
+        or die "unable to open $fn: $!\n";
+    while (<FILE>) {
+        next unless m!^\s*(\w+)\s*=\s*(.+?)\s*$!;
+        $opts{$1} = $2;
+    }
+    close FILE;
+}
+
+# break up the trackers and ensure we got some
+if ($opts{trackers}) {
+    $opts{trackers} = [ split(/\s*,\s*/, $opts{trackers}) ];
+}
+fail_text('no_trackers')
+    unless $opts{trackers} && @{$opts{trackers}};
+
+# okay, load up the libraries that we need
+if ($opts{lib}) {
+    eval "use lib '$opts{lib}';";
+}
+eval "use MogileFS; 1;" or fail_text('cant_find_module');
+
+# make sure we have at least a noun
+my $noun = shift(@ARGV);
+abortWithUsage() unless $noun;
+
+# okay, turn off line bufering, as we like to get our stuff as we print
+$| = 1;
+
+# dispatch if it's special
+cmd_check() if $noun eq 'check';
+
+# get the verb
+my $verb = shift(@ARGV);
+abortWithUsage() unless $verb;
+
+# see what we should do
+no strict 'refs';
+my $sub = *{"cmd_${noun}_${verb}"} or abortWithUsage();
+use strict 'refs';
+
+# now call our lovely lovely sub
+$sub->(@ARGV);
+
+# if we get here, we're boned
+abortWithUsage("Fell through to end!");
+
+###########################################################################
+## command routines
+###########################################################################
+
+sub cmd_check {
+    # step 1: we want to check each tracker for responsiveness
+    my $now = time();
+    my ($hosts, $devices);
+    print "Checking trackers...\n";
+    foreach my $t (@{$opts{trackers}}) {
+        print "\t$t ... ";
+        my $mogadm = mogadm($t);
+        if ($mogadm) {
+            my $lhosts = hosts($mogadm);
+            my $ldevs = devices($mogadm);
+            if ($lhosts && $ldevs) {
+                print "OK\n";
+                $hosts = $lhosts;
+                $devices = $ldevs;
+            } else {
+                print "REQUEST FAILURE (is the tracker up?)\n";
+            }
+        } else {
+            print "INITIAL FAILURE\n";
+        }
+    }
+
+    # we should have hosts if we get here
+    fail_text('no_hosts') unless $hosts;
+    print "\n";
+
+    # step 2: now hit each of the hosts for responsiveness
+    print "Checking hosts...\n";
+    my @urls;
+    foreach my $hostid (sort keys %$hosts) {
+        printf "\t[%2d] %s ... ", $hostid, $hosts->{$hostid}->{hostname};
+        if ($hosts->{$hostid}->{status} eq 'alive') {
+            my $url = 'http://' . $hosts->{$hostid}->{hostip} . ':' . $hosts->{$hostid}->{http_port} . '/';
+            my $file = get($url);
+            if (defined $file) {
+                print "OK\n";
+                push @urls, [ $hostid, $url ];
+            } else {
+                print "REQUEST FAILURE\n";
+            }
+        } else {
+            print "skipping; status = $hosts->{$hostid}->{status}\n";
+        }
+    }
+
+    # everything should be chill
+    fail_text('no_devices') unless @urls;
+    print "\n";
+
+    # step 3: check devices for each host
+    print "Checking devices...\n";
+    printf "\thost device         %10s %10s %10s %7s\n", 'size(G)', 'used(G)', 'free(G)', 'use% ';
+    printf "\t---- --------------- ---------- ---------- ---------- ------\n";
+    my %total;
+    foreach my $hosturl (@urls) {
+        my ($hostid, $url) = @$hosturl;
+        my $devs = $devices->{$hostid};
+        foreach my $devid (sort keys %$devs) {
+            printf "\t[%2d] %-10s", $hostid, "dev$devid";
+
+            my $usage = get($url . "/dev$devid/usage");
+            if (defined $usage) {
+                my %data = ( map { split(/:\s+/, $_) } split(/\r?\n/, $usage) );
+                $data{age} = $now - $data{time};
+                $data{used} /= 1024**2;
+                $data{total} /= 1024**2;
+                $data{avail} = $data{total} - $data{used};
+                my $pct = $data{used}/$data{total}*100;
+                $total{used} += $data{used};
+                $total{avail} += $data{avail};
+                $total{total} += $data{total};
+
+                printf "     %10.3f %10.3f %10.3f %6.2f%%\n", (map { $data{$_} } qw(total used avail)), $pct;
+            } else {
+                print "REQUEST FAILURE\n";
+            }
+        }
+    }
+    my $pct = $total{used}/$total{total}*100;
+    printf "\t---- --------------- ---------- ---------- ---------- ------\n";
+    printf "\t              total:%10.3f %10.3f %10.3f %6.2f%%\n", (map { $total{$_} } qw(total used avail)), $pct;
+
+    # if we get here, all's well
+    exit 0;
+}
+
+sub cmd_host_list {
+    my $hosts = hosts();
+    fail_text('no_hosts') unless $hosts;
+
+    foreach my $hostid (sort keys %$hosts) {
+        my $host = $hosts->{$hostid};
+        print "$host->{hostname} [$hostid]: $host->{status}\n";
+        my @data = (
+            'IP', "$host->{hostip}:$host->{http_port}",
+            'Alternate IP', $host->{altip},
+            'Alternate Mask', $host->{altmask},
+            'GET Port', $host->{http_get_port},
+        );
+        while (my ($k, $v) = splice(@data, 0, 2)) {
+            next unless $v;
+            printf "  %-10s\%s\n", "$k:", $v;
+        }
+        print "\n";
+    }
+    exit 0;
+}
+
+sub cmd_host_add {
+    my $hosts = hosts();
+    fail_text('no_hosts') unless $hosts;
+
+    my $name = shift();
+    abortWithUsage() unless $name;
+
+    my %args;
+    GetOptions('ip=s' => \$args{ip},
+               'port=i' => \$args{port},
+               'getport=i' => \$args{getport},
+               'altip=s' => \$args{altip},
+               'altmask=s' => \$args{altmask},
+               'status=s' => \$args{status},
+               );
+
+    # make sure we have an ip
+    unless ($args{ip}) {
+        my $addr = gethostbyname($name);
+        fail_text('host_add_no_ip') unless $addr;
+        $args{ip} = inet_ntoa($addr);
+    }
+
+    # FIXME: verify the status can't be 'alive' if we can't get to ip:port
+
+    # defaults
+    $args{port} ||= 7500;
+    $args{status} ||= 'down';
+
+    # now create the host
+    my $mogadm = mogadm();
+    $mogadm->create_host($name, \%args);
+    if ($mogadm->err) {
+        fail("A host by that name already exists.")
+            if $mogadm->errcode eq 'host_exists';
+        fail("Failure creating host: " . $mogadm->errstr);
+    }
+
+    ok('Host has been created.');
+}
+
+sub cmd_host_modify {
+    my $name = shift();
+    abortWithUsage() unless $name;
+
+    my %args;
+    GetOptions('ip=s' => \$args{ip},
+               'port=i' => \$args{port},
+               'getport=i' => \$args{getport},
+               'altip=s' => \$args{altip},
+               'altmask=s' => \$args{altmask},
+               'status=s' => \$args{status},
+               );
+
+    # FIXME: verify the status can't be 'alive' if we can't get to ip:port
+
+    # delete any keys that aren't useful (populated)
+    foreach my $key (keys %args) {
+        delete $args{$_}
+            unless $args{$_};
+    }
+
+    # now modify the host
+    my $mogadm = mogadm();
+    $mogadm->update_host($name, \%args);
+    if ($mogadm->err) {
+        fail("Failure modifying host: " . $mogadm->errstr);
+    }
+
+    ok('Host has been modified.');
+}
+
+sub cmd_host_delete {
+    my $name = shift();
+    abortWithUsage() unless $name;
+
+    # now modify the host
+    my $mogadm = mogadm();
+    $mogadm->delete_host($name);
+    if ($mogadm->err) {
+        fail("Failure deleting host: " . $mogadm->errstr);
+    }
+
+    ok('Host has been deleted.');
+}
+
+sub cmd_host_mark {
+    my $name = shift();
+    my $status = shift();
+    abortWithUsage() unless $name && $status;
+
+    # now modify
+    my $mogadm = mogadm();
+    $mogadm->update_host($name, { status => $status });
+    if ($mogadm->err) {
+        fail("Failure updating host status: " . $mogadm->errstr);
+    }
+
+    ok('Host status updated.');
+}
+
+###########################################################################
+## helper routines
+###########################################################################
+
+sub abortWithUsage {
+    my $msg = join '', @_;
+
+    if ($msg) {
+        pod2usage(verbose => 1, exitval => 1, message => "$msg");
+    } else {
+        pod2usage(verbose => 1, exitval => 1);
+    }
+}
+
+sub text {
+    return {
+
+        ######################################################################
+        cant_find_module => <<END,
+Unable to find MogileFS module.  Please ensure that you have the module
+installed in a location in your search path.  Or, add a search path to
+mogadm:
+
+    mogadm --lib=/path/to/lib
+
+Or add it to the configuration file:
+
+    lib = /path/to/lib
+END
+
+        ######################################################################
+        no_mogadm => <<END,
+Unable to access MogileFS tracker and/or instantiate a MogileFS::Admin object.
+END
+
+        ######################################################################
+        no_devices => <<END,
+No hosts, so no devices.
+END
+
+        ######################################################################
+        host_add_no_ip => <<END,
+Hostname does not resolve to an IP, and you didn't specify one on the options
+list.  Please either verify the host resolves, or try again:
+
+    mogadm host add <hostname> --ip=<ipaddr> [...]
+END
+
+        ######################################################################
+        no_hosts => <<END,
+Unable to retrieve host information from tracker(s).
+END
+
+        ######################################################################
+        no_trackers => <<END,
+In order to use the mogadm toolkit, you need to provide the information about
+wherey our trackers are.
+
+In your configuration file:
+
+    trackers = 10.10.0.33:7001, 10.10.0.34:7001
+
+Or on the command line
+
+    mogadm --trackers=10.10.0.33:7001,10.10.0.34:7001
+END
+
+    }->{$_[0]} || "UNDEFINED [$_[0]]";
+}
+
+sub fail_text {
+    print STDERR text($_[0]) . "\n";
+    exit 1;
+}
+
+sub fail {
+    print STDERR $_[0] . "\n";
+    exit 1;
+}
+
+sub ok {
+    print STDOUT $_[0] . "\n";
+    exit 0;
+}
+
+sub mogfs {
+    
+}
+
+sub mogadm {
+    my $host = shift();
+    if ($host) {
+        $host = [ $host ] unless ref $host;
+    } else {
+        $host = $opts{trackers};
+    }
+#    $MogileFS::DEBUG = 2;
+    my $mogadm = MogileFS::Admin->new( hosts => $host );
+    fail_text('no_mogadm') unless $mogadm;
+    return $mogadm;
+}
+
+sub hosts {
+    my $mogadm = shift() || mogadm();
+    fail_text('no_mogadm') unless $mogadm;
+
+    my $res;
+    eval {
+        $res = _array_to_hashref($mogadm->get_hosts(), 'hostid');
+    };
+    return undef if $@;
+    return $res;
+}
+
+sub devices {
+    my $mogadm = shift() || mogadm();
+    fail_text('no_mogadm') unless $mogadm;
+
+    my $res;
+    eval {
+        $res = _array_to_hashref($mogadm->get_devices(), [ 'hostid', 'devid' ]);
+    };
+    return undef if $@;
+    return $res;
+}
+
+sub domains {
+    my $mogadm = shift() || mogadm();
+    fail_text('no_mogadm') unless $mogadm;
+
+    my $res;
+    eval {
+        $res = $mogadm->get_domains();
+    };
+    return undef if $@;
+    return $res;
+}
+
+sub _array_to_hashref {
+    my ($array, $key) = @_;
+    die "bad caller to _array_to_hashref\n"
+        unless $array && $key;
+    $key = [ $key ] unless ref $key eq 'ARRAY';
+    my $kmax = scalar(@$key) - 1;
+
+    # and a dose of handwavium...
+    my %res;
+    foreach my $row (@$array) {
+        my $ref = \%res;
+        for (my $i = 0; $i <= $kmax; $i++) {
+            if ($i == $kmax) {
+                # we're on the last key so just assign into $ref
+                $ref->{$row->{$key->[$i]}} = $row;
+            } else {
+                # not on the last, so keep descending
+                $ref->{$row->{$key->[$i]}} ||= {};
+                $ref = $ref->{$row->{$key->[$i]}};
+            }
+        }
+    }
+
+    # return result.. duh
+    return \%res;
+}
+
+__END__
+###########################################################################
+## Plain Ol' Documentation
+###########################################################################
+
+=head1 NAME
+
+mogadm - MogileFS administrator's toolkit
+
+=head1 SYNOPSIS
+
+mogadm [config options] <argument(s)> [argument options]
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<--lib=/path/to/lib>
+
+Set this option to a path to include this directory in the module
+search path.
+
+=item B<--trackers=10.0.0.117:7001,10.0.0.118:7001,...>
+
+Use these MogileFS trackers for status information.
+
+=item B<--help>
+
+Print out some help about the program.
+
+=back
+
+=head1 ARGUMENTS
+
+=over 8
+
+=item B<check>
+
+Check to ensure that all of the MogileFS system components are functioning
+and that we can contact everybody.  The quickest way of ensuring that the
+entire MogileFS system is functional from the current machine's point of view.
+
+=item B<host add E<lt>hostE<gt> [host options]>
+
+=item B<host modify E<lt>hostE<gt> [host options]>
+
+=item B<host mark E<lt>hostE<gt> E<lt>statusE<gt>>
+
+=item B<host delete E<lt>hostE<gt>>
+
+=item B<host list>
+
+Functions for manipulating hosts.  For add and modify, host options is in
+the format of normal command line options and can include anything in the
+L</"HOST OPTIONS"> section.
+
+=back
+
+=head1 HOST OPTIONS
+
+=over 8
+
+=item B<--ip=E<lt>ip of hostE<gt>>
+
+=item B<--port=E<lt>port of mogstored on hostE<gt>>
+
+Contact information for the host.  This is the minimum set of information needed
+to setup a host.
+
+=item B<--getport=E<lt>alternate retrieval part on hostE<gt>>
+
+If provided, causes the tracker to use this port for retrieving files.  Uploads are
+still processed at the standard port.
+
+=item B<--altip=E<lt>alternate IPE<gt>>
+
+=item B<--altmask=E<lt>mask to activate alternate IPE<gt>>
+
+If a client request comes in from an IP that matches the alternate mask, then the
+host IP is treated as the alternate IP instead of the standard IP.  This can be
+used, for example, if you have two networks and you need to return one IP to
+reach the node on one network, but a second IP to reach it on the alternate
+network.
+
+=item B<--status=E<lt>host statusE<gt>>
+
+Valid statuses are one of: alive, down, dead.
+
+=back
+
+=head1 EXAMPLES
+
+Host manipulation:
+
+    $ mogadm host add foo.local
+    $ mogadm host add foo.local --status=down --ip=10.0.0.34 --port=7900
+    $ mogadm host mark foo.local down
+    $ mogadm host modify foo.local --port=7500
+    $ mogadm host delete foo.local
+
+Check the status of your entire MogileFS system:
+
+    $ mogadm check
+
+=head1 CONFIGURATION
+
+It is recommended that you create a configuration file such as C</etc/mogilefs.conf> to
+be used for configuration information.  Basically all you need is something like:
+
+    lib = /home/mogilefs/cgi-bin
+    trackers = 127.0.0.1:6001, 127.0.0.1:7001
+
+The C<lib> directive needs to point to the directory that houses C<MogileFS.pm>.  The
+trackers directive points us at the proper location for finding your trackers.
+
+Note that these can also be specified on the command line, as per above.
+
+=head1 AUTHOR
+
+Written by Mark Smith E<lt>L<"junior@danga.com">E<gt>.
+
+=head1 BUGS
+
+Please report any on the MogileFS mailing list: L<"http://lists.danga.com/mogilefs">.
+
+=head1 LICENSE
+
+Licensed for use and redistribution under the same terms as Perl itself.
+
+=cut
