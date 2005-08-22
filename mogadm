@@ -348,6 +348,75 @@ sub cmd_domain_delete {
     ok('Domain deleted.');
 }
 
+sub cmd_class_list {
+    # same, pass it through
+    cmd_domain_list();
+}
+
+sub cmd_class_add {
+    my $domains = domains();
+    fail_text('no_domains') unless $domains;
+
+    my ($domain, $class) = @_;
+    abortWithUsage() unless $domain && $class;
+    fail('Domain not found.') unless $domains->{$domain};
+    fail('Class already exists.') if $domains->{$domain}->{$class};
+
+    my %args;
+    GetOptions('mindevcount=i' => \$args{mindevcount});
+
+    $args{mindevcount} ||= 2;
+
+    my $mogadm = mogadm();
+    $mogadm->create_class($domain, $class, $args{mindevcount});
+    if ($mogadm->err) {
+        fail('Error creating class: ' . $mogadm->errstr);
+    }
+
+    ok('Class created.');
+}
+
+sub cmd_class_modify {
+    my $domains = domains();
+    fail_text('no_domains') unless $domains;
+
+    my ($domain, $class) = @_;
+    abortWithUsage() unless $domain && $class;
+    fail('Domain not found.') unless $domains->{$domain};
+    fail('Class does not exist.') unless $domains->{$domain}->{$class};
+
+    my %args;
+    GetOptions('mindevcount=i' => \$args{mindevcount});
+
+    $args{mindevcount} ||= 2;
+
+    my $mogadm = mogadm();
+    $mogadm->update_class($domain, $class, $args{mindevcount});
+    if ($mogadm->err) {
+        fail('Error updating class: ' . $mogadm->errstr);
+    }
+
+    ok('Class updated.');
+}
+
+sub cmd_class_delete {
+    my $domains = domains();
+    fail_text('no_domains') unless $domains;
+
+    my ($domain, $class) = @_;
+    abortWithUsage() unless $domain && $class;
+    fail('Domain not found.') unless $domains->{$domain};
+    fail('Class does not exist.') unless $domains->{$domain}->{$class};
+
+    my $mogadm = mogadm();
+    $mogadm->delete_class($domain, $class);
+    if ($mogadm->err) {
+        fail('Error deleting class: ' . $mogadm->errstr);
+    }
+
+    ok('Class deleted.'); 
+}
+
 ###########################################################################
 ## helper routines
 ###########################################################################
@@ -575,6 +644,18 @@ L</"HOST OPTIONS"> section.
 Simple commands for managing MogileFS domains.  Note that you cannot delete
 a domain unless it has no classes and is devoid of files.
 
+=item B<class add E<lt>domainE<gt> E<lt>classE<gt> [class options]>
+
+=item B<class modify E<lt>domainE<gt> E<lt>classE<gt> [class options]>
+
+=item B<class delete E<lt>domainE<gt> E<lt>classE<gt>>
+
+=item B<class list>
+
+Commands for working with classes.  Please see the L</"CLASS OPTIONS"> section
+for the options to use with add/modify.  Also, delete requires that the class
+have no files in it before it will allow the deletion.
+
 =back
 
 =head1 HOST OPTIONS
@@ -609,6 +690,17 @@ Valid statuses are one of: alive, down, dead.
 
 =back
 
+=head1 CLASS OPTIONS
+
+=over 8
+
+=item B<--mindevcount=E<lt>valueE<gt>>
+
+Number of devices the files in this class should be replicated across.  Can be
+set to anything >= 1.
+
+=back
+
 =head1 EXAMPLES
 
 Host manipulation:
@@ -624,6 +716,14 @@ Domain manipulation:
     $ mogadm domain list
     $ mogadm domain add first.domain
     $ mogadm domain delete first.domain
+
+Class manipulation
+
+    $ mogadm class list
+    $ mogadm class add first.domain my.class
+    $ mogadm class add first.domain my.class --mindevcount=3
+    $ mogadm class modify first.domain my.class --mindevcount=2
+    $ mogadm class delete first.domain my.class
 
 Check the status of your entire MogileFS system:
 
