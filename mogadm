@@ -292,6 +292,62 @@ sub cmd_host_mark {
     ok('Host status updated.');
 }
 
+sub cmd_domain_list {
+    # actually lists domains and classes
+    my $domains = domains();
+    fail_text('no_domains') unless $domains;
+
+    # now iterate
+    printf " %-20s %-20s \%s\n", "domain", "class", "mindevcount";
+    printf "%-20s %-20s \%s\n", '-' x 20, '-' x 20, '-' x 13;
+    foreach my $domain (sort keys %$domains) {
+        foreach my $class (sort keys %{$domains->{$domain}}) {
+            printf " %-20s %-20s      \%d\n", $domain, $class, $domains->{$domain}->{$class};
+        }
+        print "\n";
+    }
+
+    ok();
+}
+
+sub cmd_domain_add {
+    my $domains = domains();
+    fail_text('no_domains') unless $domains;
+
+    # make sure it doesn't exist
+    my $domain = shift();
+    abortWithUsage() unless $domain;
+    fail('Domain already exists.') if $domains->{$domain};
+
+    # create
+    my $mogadm = mogadm();
+    $mogadm->create_domain($domain);
+    if ($mogadm->err) {
+        fail('Error creating domain: ' . $mogadm->errstr);
+    }
+
+    ok('Domain created.');
+}
+
+sub cmd_domain_delete {
+    my $domains = domains();
+    fail_text('no_domains') unless $domains;
+
+    # make sure it doesn't exist
+    my $domain = shift();
+    abortWithUsage() unless $domain;
+    fail('Domain not found.') unless $domains->{$domain};
+
+    # destroy
+    my $mogadm = mogadm();
+    $mogadm->delete_domain($domain);
+    if ($mogadm->err) {
+        fail('Error deleting domain: ' . $mogadm->errstr);
+    }
+
+    ok('Domain deleted.');
+}
+
 ###########################################################################
 ## helper routines
 ###########################################################################
@@ -328,9 +384,10 @@ Unable to access MogileFS tracker and/or instantiate a MogileFS::Admin object.
 END
 
         ######################################################################
-        no_devices => <<END,
-No hosts, so no devices.
-END
+        no_domains => "Unable to retrieve domains from tracker(s).\n",
+
+        ######################################################################
+        no_devices => "No hosts, so no devices.\n",
 
         ######################################################################
         host_add_no_ip => <<END,
@@ -373,7 +430,7 @@ sub fail {
 }
 
 sub ok {
-    print STDOUT $_[0] . "\n";
+    print STDOUT $_[0] . "\n" if $_[0];
     exit 0;
 }
 
@@ -483,10 +540,6 @@ search path.
 
 Use these MogileFS trackers for status information.
 
-=item B<--help>
-
-Print out some help about the program.
-
 =back
 
 =head1 ARGUMENTS
@@ -512,6 +565,15 @@ entire MogileFS system is functional from the current machine's point of view.
 Functions for manipulating hosts.  For add and modify, host options is in
 the format of normal command line options and can include anything in the
 L</"HOST OPTIONS"> section.
+
+=item B<domain add E<lt>domainE<gt>>
+
+=item B<domain delete E<lt>domainE<gt>>
+
+=item B<domain list>
+
+Simple commands for managing MogileFS domains.  Note that you cannot delete
+a domain unless it has no classes and is devoid of files.
 
 =back
 
@@ -556,6 +618,12 @@ Host manipulation:
     $ mogadm host mark foo.local down
     $ mogadm host modify foo.local --port=7500
     $ mogadm host delete foo.local
+
+Domain manipulation:
+
+    $ mogadm domain list
+    $ mogadm domain add first.domain
+    $ mogadm domain delete first.domain
 
 Check the status of your entire MogileFS system:
 
