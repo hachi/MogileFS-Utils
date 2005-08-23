@@ -166,7 +166,7 @@ sub cmd_check {
     printf "\t              total:%10.3f %10.3f %10.3f %6.2f%%\n", (map { $total{$_} } qw(total used avail)), $pct;
 
     # if we get here, all's well
-    exit 0;
+    ok();
 }
 
 sub cmd_host_list {
@@ -178,8 +178,8 @@ sub cmd_host_list {
         print "$host->{hostname} [$hostid]: $host->{status}\n";
         my @data = (
             'IP', "$host->{hostip}:$host->{http_port}",
-            'Alternate IP', $host->{altip},
-            'Alternate Mask', $host->{altmask},
+            'Alt IP', $host->{altip},
+            'Alt Mask', $host->{altmask},
             'GET Port', $host->{http_get_port},
         );
         while (my ($k, $v) = splice(@data, 0, 2)) {
@@ -188,15 +188,16 @@ sub cmd_host_list {
         }
         print "\n";
     }
-    exit 0;
+    ok();
 }
 
 sub cmd_host_add {
-    my $hosts = hosts();
+    my $hosts = hosts_byname();
     fail_text('no_hosts') unless $hosts;
 
     my $name = shift();
     abortWithUsage() unless $name;
+    fail('Host already exists.') if $hosts->{$name};
 
     my %args;
     GetOptions('ip=s' => \$args{ip},
@@ -224,8 +225,6 @@ sub cmd_host_add {
     my $mogadm = mogadm();
     $mogadm->create_host($name, \%args);
     if ($mogadm->err) {
-        fail("A host by that name already exists.")
-            if $mogadm->errcode eq 'host_exists';
         fail("Failure creating host: " . $mogadm->errstr);
     }
 
@@ -417,6 +416,48 @@ sub cmd_class_delete {
     ok('Class deleted.'); 
 }
 
+sub cmd_device_add {
+    my $hosts = hosts();
+    fail_text('no_hosts') unless $hosts;
+
+    my $devid = 0;
+    ok('Device added with id: ' . $devid . '.');
+}
+
+sub cmd_device_mark {
+
+}
+
+sub cmd_device_list {
+    my $hosts = hosts();
+    fail_text('no_hosts') unless $hosts;
+
+    my $devs = devices();
+    fail_text('no_devices') unless $devs;
+
+    foreach my $hostid (sort keys %$hosts) {
+        my $host = $hosts->{$hostid};
+        print "$host->{hostname} [$hostid]: $host->{status}\n";
+
+        printf "%6s  %-10s %7s %7s %7s\n", '', '', 'used(G)', 'free(G)', 'total(G)';
+        foreach my $devid (sort keys %{$devs->{$hostid} || {}}) {
+            my $dev = $devs->{$hostid}->{$devid};
+            my $total = $dev->{mb_total} / 1024;
+            my $used = $dev->{mb_used} / 1024;
+            my $free = $total - $used;
+            printf "%6s: %-10s %-7.3f %-7.3f %-7.3f\n", "dev$devid", $dev->{status}, $used, $free, $total;
+        }
+
+        print "\n";
+    }
+
+    ok();
+}
+
+sub cmd_device_delete {
+
+}
+
 ###########################################################################
 ## helper routines
 ###########################################################################
@@ -456,7 +497,7 @@ END
         no_domains => "Unable to retrieve domains from tracker(s).\n",
 
         ######################################################################
-        no_devices => "No hosts, so no devices.\n",
+        no_devices => "No devices found on tracker(s).\n",
 
         ######################################################################
         host_add_no_ip => <<END,
@@ -518,6 +559,18 @@ sub mogadm {
     my $mogadm = MogileFS::Admin->new( hosts => $host );
     fail_text('no_mogadm') unless $mogadm;
     return $mogadm;
+}
+
+sub hosts_byname {
+    my $mogadm = shift() || mogadm();
+    fail_text('no_mogadm') unless $mogadm;
+
+    my $res;
+    eval {
+        $res = _array_to_hashref($mogadm->get_hosts(), 'hostname');
+    };
+    return undef if $@;
+    return $res;
 }
 
 sub hosts {
@@ -635,6 +688,18 @@ Functions for manipulating hosts.  For add and modify, host options is in
 the format of normal command line options and can include anything in the
 L</"HOST OPTIONS"> section.
 
+=item B<device add E<lt>hostE<gt> [device id]>
+
+=item B<device mark E<lt>hostE<gt> E<lt>device idE<gt> E<lt>statusE<gt>>
+
+=item B<device delete E<lt>hostE<gt> E<lt>deviceE<gt>>
+
+=item B<device list>
+
+Adding, editing, and deleting devices.  The device id is optional in the add
+command: if you provide one, it will be setup using the provided id; else, a
+new id is assigned and provided to you for setting up the device.
+
 =item B<domain add E<lt>domainE<gt>>
 
 =item B<domain delete E<lt>domainE<gt>>
@@ -705,11 +770,20 @@ set to anything >= 1.
 
 Host manipulation:
 
+    $ mogadm host list
     $ mogadm host add foo.local
     $ mogadm host add foo.local --status=down --ip=10.0.0.34 --port=7900
     $ mogadm host mark foo.local down
     $ mogadm host modify foo.local --port=7500
     $ mogadm host delete foo.local
+
+Device manipulation:
+
+    $ mogadm device list
+    $ mogadm device add foo.local
+    $ mogadm device add foo.local 17
+    $ mogadm device mark foo.local 17 down
+    $ mogadm device delete foo.local 17
 
 Domain manipulation:
 
