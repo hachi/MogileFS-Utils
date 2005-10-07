@@ -1194,7 +1194,41 @@ sub list {
 }
 
 sub mdelete {
-    die "not implemented yet\n";
+    my $key = shift(@ARGV);
+    abortWithUsage() unless $key;
+
+    # delete simple file
+    unless ($opts{big}) {
+        my $rv = $mogfs->delete($key);
+        error("Failed to delete: $key.", ERR_FATAL)
+            unless $rv;
+        print "Deleted.\n";
+        exit 0;
+    }
+
+    # delete big file
+    my $info = $mogfs->get_file_data("_big_info:$key");
+    error("$key doesn't seem to be a valid big file.", ERR_FATAL)
+        unless $info && $$info;
+
+    # verify validity
+    my $file = _parse_info($$info);
+
+    # make sure we have enough info to delete
+    error("Error: info file doesn't contain required information?", ERR_FATAL)
+        unless $file->{chunks} && $file->{maxnum};
+
+    # now delete each chunk, best attempt
+    foreach my $i (1..$file->{maxnum}) {
+        $mogfs->delete("$key,$i");
+    }
+
+    # delete the main pieces
+    my $rv = $mogfs->delete("_big_info:$key");
+    error("Unable to delete _big_info:$key.", ERR_FATAL)
+        unless $rv;
+    print "Deleted.\n";
+    exit 0;
 }
 
 abortWithUsage() if $opts{help};
