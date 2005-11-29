@@ -112,7 +112,7 @@ sub cmd_check {
     # step 2: now hit each of the hosts for responsiveness
     print "Checking hosts...\n";
     my @urls;
-    foreach my $hostid (sort keys %$hosts) {
+    foreach my $hostid (sort { $a <=> $b } keys %$hosts) {
         printf "\t[%2d] %s ... ", $hostid, $hosts->{$hostid}->{hostname};
         if ($hosts->{$hostid}->{status} eq 'alive') {
             my $url = 'http://' . $hosts->{$hostid}->{hostip} . ':' . $hosts->{$hostid}->{http_port} . '/';
@@ -140,7 +140,7 @@ sub cmd_check {
     foreach my $hosturl (@urls) {
         my ($hostid, $url) = @$hosturl;
         my $devs = $devices->{$hostid};
-        foreach my $devid (sort keys %$devs) {
+        foreach my $devid (sort { $a <=> $b } keys %$devs) {
             printf "\t[%2d] %-10s", $hostid, "dev$devid";
 
             my $usage = get($url . "/dev$devid/usage");
