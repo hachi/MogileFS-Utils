@@ -12,13 +12,10 @@ use Socket;
 
 # get config options
 my (%opts, %int);
-Getopt::Long::Configure("pass_through");
+
+Getopt::Long::Configure("require_order");
 GetOptions(
         "trackers=s" => \$opts{trackers},
-        "dbhost=s"   => \$opts{dbhost},
-        "dbuser=s"   => \$opts{dbuser},
-        "dbpass=s"   => \$opts{dbpass},
-        "dbname=s"   => \$opts{dbname},
         "config=s"   => \$opts{config},
         "lib=s"      => \$opts{lib},
         "help"       => \$opts{help},
@@ -34,11 +31,16 @@ foreach my $fn (reverse @configs) {
     open FILE, "<$fn"
         or die "unable to open $fn: $!\n";
     while (<FILE>) {
+        s/\#.*//;
         next unless m!^\s*(\w+)\s*=\s*(.+?)\s*$!;
         $opts{$1} = $2;
     }
     close FILE;
 }
+
+# make sure we have at least a noun
+my $noun = shift(@ARGV);
+abortWithUsage() unless $noun;
 
 # break up the trackers and ensure we got some
 if ($opts{trackers}) {
@@ -52,10 +54,6 @@ if ($opts{lib}) {
     eval "use lib '$opts{lib}';";
 }
 eval "use MogileFS; 1;" or fail_text('cant_find_module');
-
-# make sure we have at least a noun
-my $noun = shift(@ARGV);
-abortWithUsage() unless $noun;
 
 # okay, turn off line bufering, as we like to get our stuff as we print
 $| = 1;
@@ -413,15 +411,24 @@ sub cmd_class_delete {
         fail('Error deleting class: ' . $mogadm->errstr);
     }
 
-    ok('Class deleted.'); 
+    ok('Class deleted.');
 }
 
 sub cmd_device_add {
     my $hosts = hosts();
     fail_text('no_hosts') unless $hosts;
 
-    my $devid = 0;
-    ok('Device added with id: ' . $devid . '.');
+    my ($host, $devid, $state) = @_;
+    $state ||= "alive";
+
+    my $mogadm = mogadm();
+    $mogadm->create_device(hostname => $host, devid => $devid, state => $state);
+
+    if ($mogadm->err) {
+        fail('Error adding device: ' . $mogadm->errstr);
+    }
+
+    ok('Device added.');
 }
 
 sub cmd_device_mark {
@@ -457,6 +464,7 @@ sub cmd_device_list {
 sub cmd_device_delete {
 
 }
+
 
 ###########################################################################
 ## helper routines
@@ -501,7 +509,7 @@ END
 
         ######################################################################
         host_add_no_ip => <<END,
-Hostname does not resolve to an IP, and you didn't specify one on the options
+Hostname does not resolve to an IP, and you didn\'t specify one on the options
 list.  Please either verify the host resolves, or try again:
 
     mogadm host add <hostname> --ip=<ipaddr> [...]
@@ -515,7 +523,7 @@ END
         ######################################################################
         no_trackers => <<END,
 In order to use the mogadm toolkit, you need to provide the information about
-wherey our trackers are.
+where your trackers are.
 
 In your configuration file:
 
@@ -545,7 +553,7 @@ sub ok {
 }
 
 sub mogfs {
-    
+
 }
 
 sub mogadm {
