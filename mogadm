@@ -13,7 +13,7 @@ use Socket;
 # get config options
 my (%opts, %int);
 
-Getopt::Long::Configure("require_order");
+Getopt::Long::Configure("require_order", "pass_through");
 GetOptions(
         "trackers=s" => \$opts{trackers},
         "config=s"   => \$opts{config},
@@ -193,7 +193,7 @@ sub cmd_host_add {
     my $hosts = hosts_byname();
     fail_text('no_hosts') unless $hosts;
 
-    my $name = shift();
+    my $name = shift @ARGV;
     abortWithUsage() unless $name;
     fail('Host already exists.') if $hosts->{$name};
 
@@ -230,7 +230,7 @@ sub cmd_host_add {
 }
 
 sub cmd_host_modify {
-    my $name = shift();
+    my $name = shift @ARGV;
     abortWithUsage() unless $name;
 
     my %args;
@@ -354,7 +354,9 @@ sub cmd_class_add {
     my $domains = domains();
     fail_text('no_domains') unless $domains;
 
-    my ($domain, $class) = @_;
+    my $domain = shift @ARGV;
+    my $class  = shift @ARGV;
+
     abortWithUsage() unless $domain && $class;
     fail('Domain not found.') unless $domains->{$domain};
     fail('Class already exists.') if $domains->{$domain}->{$class};
@@ -377,7 +379,9 @@ sub cmd_class_modify {
     my $domains = domains();
     fail_text('no_domains') unless $domains;
 
-    my ($domain, $class) = @_;
+    my $domain = shift @ARGV;
+    my $class  = shift @ARGV;
+
     abortWithUsage() unless $domain && $class;
     fail('Domain not found.') unless $domains->{$domain};
     fail('Class does not exist.') unless $domains->{$domain}->{$class};
