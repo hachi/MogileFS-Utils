@@ -436,7 +436,18 @@ sub cmd_device_add {
 }
 
 sub cmd_device_mark {
+    my $host   = shift @ARGV;
+    my $device = shift @ARGV;
+    my $state  = shift @ARGV;
+    abortWithUsage() unless $host && $device && $state;
 
+    my $mogadm = mogadm();
+    $mogadm->change_device_state($host, $device, $state);
+    if ($mogadm->err) {
+        fail('Error updating device: ' . $mogadm->errstr);
+    }
+
+    ok('Device updated.');
 }
 
 sub cmd_device_list {
