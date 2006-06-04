@@ -47,7 +47,7 @@ if ($opts{trackers}) {
     $opts{trackers} = [ split(/\s*,\s*/, $opts{trackers}) ];
 }
 fail_text('no_trackers')
-    unless $opts{trackers} && @{$opts{trackers}};
+    unless ($opts{trackers} && @{$opts{trackers}}) || detect_local_tracker();
 
 # okay, load up the libraries that we need
 if ($opts{lib}) {
@@ -75,6 +75,15 @@ $sub->(@ARGV);
 
 # if we get here, we're boned
 abortWithUsage("Fell through to end!");
+
+sub detect_local_tracker {
+    require IO::Socket::INET;
+    my $loctrack = "127.0.0.1:7001";
+    my $sock = IO::Socket::INET->new(PeerAddr => $loctrack, Timeout => 1);
+    return 0 unless $sock;
+    $opts{trackers} = [$loctrack];
+    return 1;
+}
 
 ###########################################################################
 ## command routines
