@@ -19,6 +19,7 @@ GetOptions(
         "config=s"   => \$opts{config},
         "lib=s"      => \$opts{lib},
         "help"       => \$opts{help},
+        "verbose"    => \$opts{verbose},
     ) or abortWithUsage();
 
 # bail for help
@@ -572,7 +573,9 @@ sub fail {
 }
 
 sub ok {
-    print STDOUT $_[0] . "\n" if $_[0];
+    if ($opts{verbose}) {
+        print STDOUT $_[0] . "\n" if $_[0];
+    }
     exit 0;
 }
 
@@ -731,6 +734,8 @@ L</"HOST OPTIONS"> section.
 Adding, editing, and deleting devices.  The device id is optional in the add
 command: if you provide one, it will be setup using the provided id; else, a
 new id is assigned and provided to you for setting up the device.
+
+When marking devices, the status can be one of {alive|down|dead|readonly}.
 
 =item B<domain add E<lt>domainE<gt>>
 
