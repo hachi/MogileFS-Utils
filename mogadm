@@ -54,7 +54,7 @@ fail_text('no_trackers')
 if ($opts{lib}) {
     eval "use lib '$opts{lib}';";
 }
-eval "use MogileFS::Admin; 1;" or fail_text('cant_find_module');
+eval "use MogileFS::Admin; use MogileFS::Client; 1;" or fail_text('cant_find_module');
 
 # okay, turn off line bufering, as we like to get our stuff as we print
 $| = 1;
