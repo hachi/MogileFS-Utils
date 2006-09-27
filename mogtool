@@ -530,7 +530,7 @@ foreach my $conf (@confs) {
 if ($opts{lib}) {
     eval "use lib '$opts{lib}';";
 }
-eval "use MogileFS;";
+eval "use MogileFS::Client;";
 
 # no trackers and domain..?
 unless ($opts{trackers} && $opts{domain}) {
@@ -565,7 +565,7 @@ sub get_mogfs {
         }
     }
 
-    my $mogfs = MogileFS->new(
+    my $mogfs = MogileFS::Client->new(
                               domain => $opts{domain},
                               hosts  => \@trackers,
                               )
