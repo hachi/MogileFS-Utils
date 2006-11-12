@@ -4,26 +4,94 @@
 ###########################################################################
 
 use strict;
-use Pod::Usage qw{ pod2usage };
 use Getopt::Long;
-use LWP::Simple;
-use Data::Dumper;
+use LWP::Simple;  # FIXME: use of this makes 'mog check' hang too long when multiple things down
 use Socket;
 
 # get config options
-my (%opts, %int);
+my (%opts);
 
-Getopt::Long::Configure("require_order", "pass_through");
-GetOptions(
-        "trackers=s" => \$opts{trackers},
-        "config=s"   => \$opts{config},
-        "lib=s"      => \$opts{lib},
-        "help"       => \$opts{help},
-        "verbose"    => \$opts{verbose},
-    ) or abortWithUsage();
-
-# bail for help
-abortWithUsage() if $opts{help};
+my @topcmds = qw(check host device domain class);
+my $usage = {
+    check => {
+        des => "Check the state of the MogileFS world.",
+    },
+    host => {
+        des => "Add/modify hosts.",
+        subcmd => {
+            list => {
+                des => "List all hosts.",
+            },
+            add => {
+                des => "Add a host to MogileFS.",
+                subcmd => "<hostname> [opts]",
+                opts => {
+                    "<hostname>" => "Hostname of machine",
+                    "--status"   => "One of {alive,down}.  Default 'alive'.",
+                    "--ip"       => "IP address of machine.",
+                    "--port"     => "HTTP port of mogstored",
+                },
+            },
+            modify => {
+                des => "Modify a host's properties.",
+                subcmd => "<hostname> [opts]",
+                opts => {
+                    "<hostname>" => "Host name.",
+                    "--status"   => "One of {alive,down}.",
+                    "--ip"       => "IP address of machine.",
+                    "--port"     => "HTTP port of mogstored",
+                },
+            },
+            mark => {
+                des => "Change the status of a host.  (equivalent to 'modify --status')",
+                subcmd => "<hostname> <status>",
+                opts => {
+                    "<hostname>" => "Host name to bring up or down.",
+                    "<status>"   => "One of {alive,down}.",
+                }
+            },
+            delete => {
+                des => "Delete a host.",
+                subcmd => "<hostname>",
+                opts => {
+                    "<hostname>" => "Host name to delete.",
+                },
+            },
+        },
+    },
+    device => {
+        des => "Add/modify devices.",
+        subcmd => {
+            list => {
+                des => "List all devices, for each host.",
+            },
+            add => {},
+            mark => {},
+            delete => {},
+        },
+    },
+    domain => {
+        des => "Add/modify domains (namespaces)",
+        subcmd => {
+            list => {
+                des => "List all hosts.",
+            },
+            add => {},
+            delete => {},
+        },
+    },
+    class => {
+        des => "Add/modify file classes.",
+        subcmd => {
+            list => {
+                des => "List all classes, for each domain.",
+            },
+            add => {},
+            modify => {},
+            delete => {},
+        },
+    },
+};
 
 # load up our config files
 my @configs = ($opts{config}, "$ENV{HOME}/.mogilefs.conf", "/etc/mogilefs/mogilefs.conf");
@@ -39,9 +107,21 @@ foreach my $fn (reverse @configs) {
     close FILE;
 }
 
-# make sure we have at least a noun
-my $noun = shift(@ARGV);
-abortWithUsage() unless $noun;
+Getopt::Long::Configure("require_order", "pass_through");
+GetOptions(
+        "trackers=s" => \$opts{trackers},
+        "config=s"   => \$opts{config},
+        "lib=s"      => \$opts{lib},
+        "help"       => \$opts{help},
+        "verbose"    => \$opts{verbose},
+    ) or abortWithUsage();
+
+# bail for help
+abortWithUsage() if $opts{help};
+
+# make sure we have at least a topcmd
+my $topcmd = shift(@ARGV);
+abortWithUsage() unless $topcmd && $usage->{$topcmd};
 
 # break up the trackers and ensure we got some
 if ($opts{trackers}) {
@@ -60,22 +140,20 @@ eval "use MogileFS::Admin; use MogileFS::Client; 1;" or fail_text('cant_find_mod
 $| = 1;
 
 # dispatch if it's special
-cmd_check() if $noun eq 'check';
+cmd_check() if $topcmd eq 'check';
 
 # get the verb
 my $verb = shift(@ARGV);
-abortWithUsage() unless $verb;
+abort_with_topcmd_help($topcmd) unless $verb && $usage->{$topcmd}{subcmd}{$verb};
 
 # see what we should do
 no strict 'refs';
-my $sub = *{"cmd_${noun}_${verb}"} or abortWithUsage();
+my $sub = *{"cmd_${topcmd}_${verb}"} or abortWithUsage();
 use strict 'refs';
 
 # now call our lovely lovely sub
 $sub->(@ARGV);
-
-# if we get here, we're boned
-abortWithUsage("Fell through to end!");
+exit 0;
 
 sub detect_local_tracker {
     require IO::Socket::INET;
@@ -203,8 +281,8 @@ sub cmd_host_add {
     my $hosts = hosts_byname();
     fail_text('no_hosts') unless $hosts;
 
+    cmd_help_die() unless @ARGV == 1;
     my $name = shift @ARGV;
-    abortWithUsage() unless $name;
     fail('Host already exists.') if $hosts->{$name};
 
     my %args;
@@ -240,8 +318,8 @@ sub cmd_host_add {
 }
 
 sub cmd_host_modify {
+    cmd_help_die() unless @ARGV == 1;
     my $name = shift @ARGV;
-    abortWithUsage() unless $name;
 
     my %args;
     GetOptions('ip=s' => \$args{ip},
@@ -285,9 +363,9 @@ sub cmd_host_delete {
 }
 
 sub cmd_host_mark {
-    my $name = shift();
-    my $status = shift();
-    abortWithUsage() unless $name && $status;
+    my $name = shift;
+    my $status = shift;
+    cmd_help_die() unless $name && $status;
 
     # now modify
     my $mogadm = mogadm();
@@ -496,23 +574,56 @@ sub cmd_device_delete {
 ###########################################################################
 
 sub abortWithUsage {
-    my $msg = join '', @_;
+    my $ret = "Usage:  (enter any command prefix, leaving off options, for further help)\n";
+    foreach my $cmd (@topcmds) {
+        my $sbc = $usage->{$cmd}->{subcmd};
+        if ($sbc) {
+            $ret .= "  mogadm $cmd ...\n";
+        } else {
+            $ret .= "  mogadm $cmd\n";
+            next;
+        }
+        foreach my $v (sort keys %$sbc) {
+            my $scv = $usage->{$cmd}{subcmd}{$v};
+            $ret .= "       ";
+            my $dotdot = $scv->{subcmd} ? "..." : "";
+            $ret .= sprintf("  %-25s %-s\n",
+                            "$cmd $v $dotdot",
+                            $scv->{des} || "");
 
-    if ($msg) {
-        pod2usage(verbose => 1, exitval => 1, message => "$msg");
-    } else {
-        pod2usage(verbose => 1, exitval => 1);
+        }
     }
+    print $ret;
+    exit(1);
 }
+
+sub abort_with_topcmd_help {
+    my ($cmd, $verb) = @_;
+    my $cmdsfx = $verb ? "-$verb" : "";
+    my $ret = "Help for '$cmd$cmdsfx' command:\n (enter any command prefix, leaving off options, for further help)\n\n";
+    foreach my $subcmd (sort keys %{$usage->{$cmd}{subcmd}}) {
+        next if $verb && $verb ne $subcmd;
+        my $scv = $usage->{$cmd}{subcmd}{$subcmd};
+        $ret .= sprintf("  %-40s %-s\n",
+                        "mogadm $cmd $subcmd $scv->{subcmd}",
+                        $scv->{des});
+    }
+    print $ret;
+    exit 1;
+}
+sub cmd_help_die {
+    abort_with_topcmd_help($topcmd, $verb);
+}
+
 
 sub text {
     return {
 
         ######################################################################
         cant_find_module => <<END,
-Unable to find MogileFS module.  Please ensure that you have the module
-installed in a location in your search path.  Or, add a search path to
-mogadm:
+Unable to find MogileFS::Admin module.  Please ensure that you have the
+module installed in a location in your search path.  Or, add a search path
+to mogadm:
 
     mogadm --lib=/path/to/lib
 
@@ -842,14 +953,15 @@ Check the status of your entire MogileFS system:
 
 =head1 CONFIGURATION
 
-It is recommended that you create a configuration file such as C</etc/mogilefs.conf> to
+It is recommended that you create a configuration file such as C</etc/mogilefs/mogilefs.conf> to
 be used for configuration information.  Basically all you need is something like:
 
     lib = /home/mogilefs/cgi-bin
-    trackers = 127.0.0.1:6001, 127.0.0.1:7001
+    trackers = 10.0.0.23:7001, 10.0.0.15:7001
 
-The C<lib> directive needs to point to the directory that houses C<MogileFS.pm>.  The
-trackers directive points us at the proper location for finding your trackers.
+The C<lib> directive needs to point to the directory containing under
+it the relative file C<MogileFS/Admin.pm>.  The trackers directive
+points us at the proper location for finding your trackers.
 
 Note that these can also be specified on the command line, as per above.
 
@@ -859,7 +971,7 @@ Written by Mark Smith E<lt>L<"junior@danga.com">E<gt>.
 
 =head1 BUGS
 
-Please report any on the MogileFS mailing list: L<"http://lists.danga.com/mogilefs">.
+Please report any on the MogileFS mailing list: L<"http://lists.danga.com/mogilefs/">.
 
 =head1 LICENSE
 
