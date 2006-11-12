@@ -135,6 +135,7 @@ GetOptions(
         "help"       => \$opts{help},
         "verbose"    => \$opts{verbose},
     ) or abortWithUsage();
+Getopt::Long::Configure("require_order");
 
 # bail for help
 abortWithUsage() if $opts{help};
@@ -316,7 +317,6 @@ sub cmd_host_add {
                'status=s' => \$args{status},
                )
         or cmd_help_die();
-    cmd_help_die() if @ARGV;
 
     # make sure we have an ip
     unless ($args{ip}) {
@@ -342,8 +342,8 @@ sub cmd_host_add {
 }
 
 sub cmd_host_modify {
-    cmd_help_die() unless @ARGV == 1;
-    my $name = shift @ARGV;
+    my $name = shift;
+    cmd_help_die() unless $name;
 
     my %args;
     GetOptions('ip=s' => \$args{ip},
@@ -352,7 +352,7 @@ sub cmd_host_modify {
                'altip=s' => \$args{altip},
                'altmask=s' => \$args{altmask},
                'status=s' => \$args{status},
-               );
+               ) or cmd_help_die();
 
     # FIXME: verify the status can't be 'alive' if we can't get to ip:port
 
