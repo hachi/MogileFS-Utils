@@ -299,8 +299,8 @@ sub cmd_host_add {
     my $hosts = hosts_byname();
     fail_text('no_hosts') unless $hosts;
 
-    cmd_help_die() unless @ARGV == 1;
     my $name = shift @ARGV;
+    cmd_help_die() unless $name;
     fail('Host already exists.') if $hosts->{$name};
 
     my %args;
@@ -310,7 +310,9 @@ sub cmd_host_add {
                'altip=s' => \$args{altip},
                'altmask=s' => \$args{altmask},
                'status=s' => \$args{status},
-               );
+               )
+        or cmd_help_die();
+    cmd_help_die() if @ARGV;
 
     # make sure we have an ip
     unless ($args{ip}) {
