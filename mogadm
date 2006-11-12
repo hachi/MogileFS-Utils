@@ -65,9 +65,15 @@ my $usage = {
             list => {
                 des => "List all devices, for each host.",
             },
-            add => {},
-            mark => {},
-            delete => {},
+            add => {
+                des => "Add a device to a host.",
+            },
+            mark => {
+                des => "Mark a device as {alive,dead,down,readonly}",
+            },
+            delete => {
+                des => "Delete a device.",
+            },
         },
     },
     domain => {
@@ -76,8 +82,12 @@ my $usage = {
             list => {
                 des => "List all hosts.",
             },
-            add => {},
-            delete => {},
+            add => {
+                des => "Add a domain (namespace)",
+            },
+            delete => {
+                des => "Delete a domain.",
+            },
         },
     },
     class => {
@@ -86,9 +96,15 @@ my $usage = {
             list => {
                 des => "List all classes, for each domain.",
             },
-            add => {},
-            modify => {},
-            delete => {},
+            add => {
+                des => "Add a file class to a domain.",
+            },
+            modify => {
+                des => "Modify properties of a file class.",
+            },
+            delete => {
+                des => "Delete a file class from a domain.",
+            },
         },
     },
 };
@@ -574,13 +590,15 @@ sub cmd_device_delete {
 ###########################################################################
 
 sub abortWithUsage {
-    my $ret = "Usage:  (enter any command prefix, leaving off options, for further help)\n";
+    my $ret = "Usage:  (enter any command prefix, leaving off options, for further help)\n\n";
     foreach my $cmd (@topcmds) {
         my $sbc = $usage->{$cmd}->{subcmd};
         if ($sbc) {
             $ret .= "  mogadm $cmd ...\n";
         } else {
-            $ret .= "  mogadm $cmd\n";
+            $ret .= sprintf("  mogadm %-25s %-s\n",
+                            "$cmd",
+                            $usage->{$cmd}{des} || "");
             next;
         }
         foreach my $v (sort keys %$sbc) {
@@ -593,7 +611,7 @@ sub abortWithUsage {
 
         }
     }
-    print $ret;
+    print $ret, "\n";
     exit(1);
 }
 
