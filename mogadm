@@ -67,6 +67,10 @@ my $usage = {
             },
             add => {
                 des => "Add a device to a host.",
+                subcmd => "<hostname> <devid> [<status>]",
+                opts => {
+                    "<status>" => "One of 'alive' or 'down'.  Defaults to 'alive'.",
+                },
             },
             mark => {
                 des => "Mark a device as {alive,dead,down,readonly}",
@@ -531,6 +535,8 @@ sub cmd_device_add {
     fail_text('no_hosts') unless $hosts;
 
     my ($host, $devid, $state) = @_;
+    cmd_help_die() unless $host && $devid;
+
     $state ||= "alive";
 
     my $mogadm = mogadm();
