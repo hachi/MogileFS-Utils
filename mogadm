@@ -68,17 +68,22 @@ my $usage = {
                 des => "List all devices, for each host.",
             },
             add => {
-                des => "Add a device to a host.",
-                args => "<hostname> <devid> [<status>]",
+                des  => "Add a device to a host.",
+                args => "<hostname> <devid> [opts]",
                 opts => {
-                    "<status>" => "One of 'alive' or 'down'.  Defaults to 'alive'.",
+                    "<hostname>" => "Hostname to add a device",
+                    "<devid>"    => "Numeric devid.  Never reuse these.",
+                    "--status=s" => "One of 'alive' or 'down'.  Defaults to 'alive'.",
                 },
             },
             mark => {
-                des => "Mark a device as {alive,dead,down,readonly}",
-            },
-            delete => {
-                des => "Delete a device.",
+                des  => "Mark a device as {alive,dead,down,readonly}",
+                args => "<hostname> <devid> <status>",
+                opts => {
+                    "<hostname>" => "Hostname of device",
+                    "<devid>"    => "Numeric devid to modify.",
+                    "<status>"   => "One of {alive,dead,down,readonly}",
+                },
             },
         },
     },
@@ -551,13 +556,18 @@ sub cmd_class_delete {
 }
 
 sub cmd_device_add {
-    my $hosts = hosts();
-    fail_text('no_hosts') unless $hosts;
+    my $args = shift;
 
-    my ($host, $devid, $state) = @_;
-    cmd_help_die() unless $host && $devid;
+    my $hosts = hosts() or
+        fail_text('no_hosts');
 
-    $state ||= "alive";
+    my $host  = $args->{hostname};
+    my $devid = $args->{devid};
+    my $state = $args->{status} || "alive";
+
+    cmd_help_die("devid should be numeric") unless $devid =~ /^\d+$/;
+
+    # FIXME: server should be fixed to verify via HTTP that the devid directory exists
 
     my $mogadm = mogadm();
     $mogadm->create_device(hostname => $host, devid => $devid, state => $state);
@@ -570,13 +580,12 @@ sub cmd_device_add {
 }
 
 sub cmd_device_mark {
-    my $host   = shift @ARGV;
-    my $device = shift @ARGV;
-    my $state  = shift @ARGV;
-    cmd_help_die() unless $host && $device && $state;
+    my $args = shift;
 
     my $mogadm = mogadm();
-    $mogadm->change_device_state($host, $device, $state);
+    $mogadm->change_device_state($args->{hostname},
+                                 $args->{devid},
+                                 $args->{status});
     if ($mogadm->err) {
         fail('Error updating device: ' . $mogadm->errstr);
     }
@@ -609,11 +618,6 @@ sub cmd_device_list {
 
     ok();
 }
-
-sub cmd_device_delete {
-    die "Not implemented.\n";
-}
-
 
 ###########################################################################
 ## helper routines
