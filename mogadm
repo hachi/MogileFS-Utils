@@ -198,9 +198,10 @@ if ($topcmd eq 'check') {
 }
 
 # get the verb
-my $verb = shift(@ARGV);
+my $verb = shift(@ARGV) or
+    abort_with_topcmd_help($topcmd);
 my $cmdinfo = $usage->{$topcmd}{subcmd}{$verb};
-abort_with_topcmd_help($topcmd) unless $verb && $cmdinfo;
+abort_with_topcmd_help($topcmd) unless $cmdinfo;
 
 my $badargs = sub {
     my $msg = shift;
@@ -695,7 +696,7 @@ sub abort_with_topcmd_help {
         next if $verb && $verb ne $subcmdv;
         my $scv = $usage->{$cmd}{subcmd}{$subcmdv};
         $ret .= sprintf("  %-50s %-s\n",
-                        "mogadm $cmd $subcmdv $scv->{args}",
+                        "mogadm $cmd $subcmdv " . ($scv->{args} || ""),
                         $scv->{des});
     }
     print $ret, "\n";
