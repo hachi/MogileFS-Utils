@@ -1,7 +1,5 @@
 #!/usr/bin/perl
-###########################################################################
-## main program
-###########################################################################
+#
 
 use strict;
 use Getopt::Long;
@@ -26,10 +24,10 @@ my $usage = {
                 des => "Add a host to MogileFS.",
                 subcmd => "<hostname> [opts]",
                 opts => {
-                    "<hostname>" => "Hostname of machine",
-                    "--status"   => "One of {alive,down}.  Default 'alive'.",
-                    "--ip"       => "IP address of machine.",
-                    "--port"     => "HTTP port of mogstored",
+                    "<hostname>"  => "Hostname of machine",
+                    "--status=s"  => "One of {alive,down}.  Default 'alive'.",
+                    "--ip=s"      => "IP address of machine.",
+                    "--port=i"    => "HTTP port of mogstored",
                 },
             },
             modify => {
@@ -37,9 +35,9 @@ my $usage = {
                 subcmd => "<hostname> [opts]",
                 opts => {
                     "<hostname>" => "Host name.",
-                    "--status"   => "One of {alive,down}.",
-                    "--ip"       => "IP address of machine.",
-                    "--port"     => "HTTP port of mogstored",
+                    "--status=s" => "One of {alive,down}.",
+                    "--ip=s"     => "IP address of machine.",
+                    "--port=i"   => "HTTP port of mogstored",
                 },
             },
             mark => {
@@ -157,11 +155,11 @@ if ($opts{lib}) {
 }
 eval "use MogileFS::Admin; use MogileFS::Client; 1;" or fail_text('cant_find_module');
 
-# okay, turn off line bufering, as we like to get our stuff as we print
-$| = 1;
-
 # dispatch if it's special
-cmd_check() if $topcmd eq 'check';
+if ($topcmd eq 'check') {
+    die "Unknown options/arguments to 'check' command.\n" if @ARGV;
+    cmd_check();
+}
 
 # get the verb
 my $verb = shift(@ARGV);
@@ -195,6 +193,7 @@ sub cmd_check {
     # step 1: we want to check each tracker for responsiveness
     my $now = time();
     my ($hosts, $devices);
+    $| = 1;
     print "Checking trackers...\n";
     foreach my $t (@{$opts{trackers}}) {
         print "\t$t ... ";
@@ -811,13 +810,10 @@ sub _array_to_hashref {
 }
 
 __END__
-###########################################################################
-## Plain Ol' Documentation
-###########################################################################
 
 =head1 NAME
 
-mogadm - MogileFS administrator's toolkit
+mogadm - MogileFS admin tool
 
 =head1 SYNOPSIS
 
@@ -995,7 +991,8 @@ Note that these can also be specified on the command line, as per above.
 
 =head1 AUTHOR
 
-Written by Mark Smith E<lt>L<"junior@danga.com">E<gt>.
+Mark Smith E<lt>L<"junior@danga.com">E<gt>.
+Brad Fitzpatrick E<lt>L<"brad@danga.com">E<gt>.
 
 =head1 BUGS
 
