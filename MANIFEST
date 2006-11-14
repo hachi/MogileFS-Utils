@@ -2,4 +2,5 @@ MANIFEST
 Changes
 Makefile.PL
 mogtool
+mogadm
 META.yml                                 Module meta-data (added by MakeMaker)
