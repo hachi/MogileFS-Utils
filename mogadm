@@ -117,12 +117,30 @@ my $usage = {
             },
             add => {
                 des => "Add a file class to a domain.",
+                args => "<domain> <class> [opts]",
+                opts => {
+                    "<domain>" => "Domain to add class to.",
+                    "<class>"  => "Name of class to add.",
+                    "--mindevcount=i" => "Mininum number of replicas.",
+                },
             },
             modify => {
                 des => "Modify properties of a file class.",
+                args => "<domain> <class> [opts]",
+                opts => {
+                    "<domain>" => "Domain to add class to.",
+                    "<class>"  => "Name of class to add.",
+                    "--mindevcount=i" => "Mininum number of replicas.",
+                },
             },
             delete => {
                 des => "Delete a file class from a domain.",
+                args => "<domain> <class>",
+                opts => {
+                    "<domain>" => "Domain of class to delete.",
+                    "<class>"  => "Class to delete.",
+                },
+
             },
         },
     },
@@ -497,23 +515,21 @@ sub cmd_class_list {
 }
 
 sub cmd_class_add {
-    my $domains = domains();
-    fail_text('no_domains') unless $domains;
+    my $args = shift;
+    my $domains = domains() or
+        fail_text('no_domains');
 
-    my $domain = shift @ARGV;
-    my $class  = shift @ARGV;
+    my $domain = $args->{domain};
+    my $class  = $args->{class};
 
     cmd_help_die() unless $domain && $class;
     fail('Domain not found.') unless $domains->{$domain};
     fail('Class already exists.') if $domains->{$domain}->{$class};
 
-    my %args;
-    GetOptions('mindevcount=i' => \$args{mindevcount});
-
-    $args{mindevcount} ||= 2;
+    $args->{mindevcount} ||= 2;
 
     my $mogadm = mogadm();
-    $mogadm->create_class($domain, $class, $args{mindevcount});
+    $mogadm->create_class($domain, $class, $args->{mindevcount});
     if ($mogadm->err) {
         fail('Error creating class: ' . $mogadm->errstr);
     }
@@ -522,23 +538,21 @@ sub cmd_class_add {
 }
 
 sub cmd_class_modify {
-    my $domains = domains();
-    fail_text('no_domains') unless $domains;
+    my $args = shift;
+    my $domains = domains() or
+        fail_text('no_domains');
 
-    my $domain = shift @ARGV;
-    my $class  = shift @ARGV;
+    my $domain = $args->{domain};
+    my $class  = $args->{class};
 
     cmd_help_die() unless $domain && $class;
     fail('Domain not found.') unless $domains->{$domain};
     fail('Class does not exist.') unless $domains->{$domain}->{$class};
 
-    my %args;
-    GetOptions('mindevcount=i' => \$args{mindevcount});
-
-    $args{mindevcount} ||= 2;
+    $args->{mindevcount} ||= 2;
 
     my $mogadm = mogadm();
-    $mogadm->update_class($domain, $class, $args{mindevcount});
+    $mogadm->update_class($domain, $class, $args->{mindevcount});
     if ($mogadm->err) {
         fail('Error updating class: ' . $mogadm->errstr);
     }
@@ -547,10 +561,14 @@ sub cmd_class_modify {
 }
 
 sub cmd_class_delete {
-    my $domains = domains();
-    fail_text('no_domains') unless $domains;
+    my $args = shift;
 
-    my ($domain, $class) = @_;
+    my $domains = domains() or
+        fail_text('no_domains');
+
+    my $domain = $args->{domain};
+    my $class  = $args->{class};
+
     cmd_help_die() unless $domain && $class;
     fail('Domain not found.') unless $domains->{$domain};
     fail('Class does not exist.') unless $domains->{$domain}->{$class};
