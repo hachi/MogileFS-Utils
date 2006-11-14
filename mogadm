@@ -95,9 +95,17 @@ my $usage = {
             },
             add => {
                 des => "Add a domain (namespace)",
+                args => "<domain>",
+                opts => {
+                    "<domain>" => "Domain (namespace) to add.",
+                },
             },
             delete => {
                 des => "Delete a domain.",
+                args => "<domain>",
+                opts => {
+                    "<domain>" => "Domain (namespace) to add.",
+                },
             },
         },
     },
@@ -428,15 +436,15 @@ sub cmd_host_mark {
 
 sub cmd_domain_list {
     # actually lists domains and classes
-    my $domains = domains();
-    fail_text('no_domains') unless $domains;
+    my $domains = domains() or
+        fail_text('no_domains');
 
     # now iterate
     printf " %-20s %-20s \%s\n", "domain", "class", "mindevcount";
     printf "%-20s %-20s \%s\n", '-' x 20, '-' x 20, '-' x 13;
     foreach my $domain (sort keys %$domains) {
         foreach my $class (sort keys %{$domains->{$domain}}) {
-            printf " %-20s %-20s      \%d\n", $domain, $class, $domains->{$domain}->{$class};
+            printf " %-20s %-20s      %d\n", $domain, $class, $domains->{$domain}->{$class} || 0;
         }
         print "\n";
     }
@@ -445,12 +453,13 @@ sub cmd_domain_list {
 }
 
 sub cmd_domain_add {
-    my $domains = domains();
-    fail_text('no_domains') unless $domains;
+    my $args = shift;
+
+    my $domains = domains() or
+        fail_text('no_domains');
 
     # make sure it doesn't exist
-    my $domain = shift();
-    cmd_help_die() unless $domain;
+    my $domain = delete $args->{domain};
     fail('Domain already exists.') if $domains->{$domain};
 
     # create
@@ -464,12 +473,12 @@ sub cmd_domain_add {
 }
 
 sub cmd_domain_delete {
-    my $domains = domains();
-    fail_text('no_domains') unless $domains;
+    my $args = shift;
+    my $domains = domains() or
+        fail_text('no_domains');
 
     # make sure it doesn't exist
-    my $domain = shift();
-    cmd_help_die() unless $domain;
+    my $domain = $args->{domain};
     fail('Domain not found.') unless $domains->{$domain};
 
     # destroy
