@@ -2,12 +2,10 @@
 #
 
 use strict;
+use warnings;
 use Getopt::Long;
 use LWP::Simple;  # FIXME: use of this makes 'mog check' hang too long when multiple things down
 use Socket;
-
-# get config options
-my (%opts);
 
 my @topcmds = qw(check host device domain class);
 my $usage = {
@@ -22,27 +20,33 @@ my $usage = {
             },
             add => {
                 des => "Add a host to MogileFS.",
-                subcmd => "<hostname> [opts]",
+                args => "<hostname> [opts]",
                 opts => {
                     "<hostname>"  => "Hostname of machine",
-                    "--status=s"  => "One of {alive,down}.  Default 'alive'.",
+                    "--status=s"  => "One of {alive,down}.  Default 'down'.",
                     "--ip=s"      => "IP address of machine.",
                     "--port=i"    => "HTTP port of mogstored",
+                    "--getport=i" => "Alternate HTTP port serving readonly traffic",
+                    "--altip=s"   => "Alternate IP that is machine is reachable from",
+                    "--altmask=s" => "Netmask which, when matches client, uses alt IP",
                 },
             },
             modify => {
                 des => "Modify a host's properties.",
-                subcmd => "<hostname> [opts]",
+                args => "<hostname> [opts]",
                 opts => {
                     "<hostname>" => "Host name.",
                     "--status=s" => "One of {alive,down}.",
                     "--ip=s"     => "IP address of machine.",
                     "--port=i"   => "HTTP port of mogstored",
+                    "--getport=i" => "Alternate HTTP port serving readonly traffic",
+                    "--altip=s"   => "Alternate IP that is machine is reachable from",
+                    "--altmask=s" => "Netmask which, when matches client, uses alt IP",
                 },
             },
             mark => {
                 des => "Change the status of a host.  (equivalent to 'modify --status')",
-                subcmd => "<hostname> <status>",
+                args => "<hostname> <status>",
                 opts => {
                     "<hostname>" => "Host name to bring up or down.",
                     "<status>"   => "One of {alive,down}.",
@@ -50,7 +54,7 @@ my $usage = {
             },
             delete => {
                 des => "Delete a host.",
-                subcmd => "<hostname>",
+                args => "<hostname>",
                 opts => {
                     "<hostname>" => "Host name to delete.",
                 },
@@ -65,7 +69,7 @@ my $usage = {
             },
             add => {
                 des => "Add a device to a host.",
-                subcmd => "<hostname> <devid> [<status>]",
+                args => "<hostname> <devid> [<status>]",
                 opts => {
                     "<status>" => "One of 'alive' or 'down'.  Defaults to 'alive'.",
                 },
@@ -112,9 +116,10 @@ my $usage = {
 };
 
 # load up our config files
+my %opts;
 my @configs = ($opts{config}, "$ENV{HOME}/.mogilefs.conf", "/etc/mogilefs/mogilefs.conf");
 foreach my $fn (reverse @configs) {
-    next unless -e $fn;
+    next unless $fn && -e $fn;
     open FILE, "<$fn"
         or die "unable to open $fn: $!\n";
     while (<FILE>) {
@@ -133,7 +138,7 @@ GetOptions(
         "help"       => \$opts{help},
         "verbose"    => \$opts{verbose},
     ) or abortWithUsage();
-Getopt::Long::Configure("require_order");
+Getopt::Long::Configure("require_order", "no_pass_through");
 
 # bail for help
 abortWithUsage() if $opts{help};
@@ -163,17 +168,58 @@ if ($topcmd eq 'check') {
 
 # get the verb
 my $verb = shift(@ARGV);
-abort_with_topcmd_help($topcmd) unless $verb && $usage->{$topcmd}{subcmd}{$verb};
+my $cmdinfo = $usage->{$topcmd}{subcmd}{$verb};
+abort_with_topcmd_help($topcmd) unless $verb && $cmdinfo;
 
-# see what we should do
-my $cmdsub;
-{
-    no strict 'refs';
-    $cmdsub = *{"cmd_${topcmd}_${verb}"} or abortWithUsage();
+my $badargs = sub {
+    my $msg = shift;
+    abort_with_topcmd_help($topcmd, $verb, $msg);
+};
+
+# get the non-option (non --foo) arguments:
+my %cmdargs;
+if (my $args = $cmdinfo->{args}) {
+    my @args = split(/ /, $args);
+    foreach my $arg (@args) {
+        # positional (but named) parameter
+        if ($arg =~ /^<(.+)>$/) {
+            my $argname = $1;
+            my $val = shift @ARGV;
+            $badargs->("Missing argument '$argname'") unless $val;
+            $badargs->("Unexpected option.  Expected argument '$argname'") if $val =~ /^-/;
+            $cmdargs{$argname} = $val;
+        } elsif ($arg eq "[opts]") {
+            # handled later.
+        } else {
+            die "INTERNAL ERROR.";
+        }
+    }
+    $badargs->("Unexpected extra argument.") if @ARGV && $ARGV[0] !~ /^-/;
+} else {
+    $badargs->("Unexpected arguments when expecting none.") if @ARGV;
 }
 
+# parse the options
+if (my $opts = $cmdinfo->{opts}) {
+    my %getopts;
+    foreach (keys %$opts) {
+        my $k = $_;
+        next if $k =~ /^</;  # don't care about these.
+        die "BOGUS KEY: '$k'" unless $k =~ /^--([\w\-]+)(=.+)?$/;
+        $getopts{"$1$2"} = \$cmdargs{$1};
+    }
+    GetOptions(%getopts)
+        or abort_with_topcmd_help($topcmd, $verb);
+}
+
+# see what we should do
+my $cmdsub = do {
+    no strict 'refs';
+    *{"cmd_${topcmd}_${verb}"} or abortWithUsage();
+};
+
 # now call our lovely lovely sub
-$cmdsub->(@ARGV);
+$cmdsub->(\%cmdargs);
 exit 0;
 
 sub detect_local_tracker {
@@ -300,39 +346,32 @@ sub cmd_host_list {
 }
 
 sub cmd_host_add {
+    my $args = shift;
+
     my $hosts = hosts_byname();
     fail_text('no_hosts') unless $hosts;
 
-    my $name = shift @ARGV;
-    cmd_help_die() unless $name;
+    my $name = delete $args->{hostname};
+    cmd_help_die("No hostname") unless $name;
     fail('Host already exists.') if $hosts->{$name};
 
-    my %args;
-    GetOptions('ip=s' => \$args{ip},
-               'port=i' => \$args{port},
-               'getport=i' => \$args{getport},
-               'altip=s' => \$args{altip},
-               'altmask=s' => \$args{altmask},
-               'status=s' => \$args{status},
-               )
-        or cmd_help_die();
-
     # make sure we have an ip
-    unless ($args{ip}) {
+    unless ($args->{ip}) {
         my $addr = gethostbyname($name);
         fail_text('host_add_no_ip') unless $addr;
-        $args{ip} = inet_ntoa($addr);
+        $args->{ip} = inet_ntoa($addr);
     }
 
-    # FIXME: verify the status can't be 'alive' if we can't get to ip:port
-
     # defaults
-    $args{port} ||= 7500;
-    $args{status} ||= 'down';
+    $args->{port}   ||= 7500;
+    $args->{status} ||= 'down';
+
+    # FIXME: verify the status can't be 'alive' if we can't get to ip:port
+    # OR BETTER: also make default status the reachability of that ip:port
 
     # now create the host
     my $mogadm = mogadm();
-    $mogadm->create_host($name, \%args);
+    $mogadm->create_host($name, $args);
     if ($mogadm->err) {
         fail("Failure creating host: " . $mogadm->errstr);
     }
@@ -341,29 +380,14 @@ sub cmd_host_add {
 }
 
 sub cmd_host_modify {
-    my $name = shift;
-    cmd_help_die() unless $name;
-
-    my %args;
-    GetOptions('ip=s' => \$args{ip},
-               'port=i' => \$args{port},
-               'getport=i' => \$args{getport},
-               'altip=s' => \$args{altip},
-               'altmask=s' => \$args{altmask},
-               'status=s' => \$args{status},
-               ) or cmd_help_die();
+    my $args = shift;
+    my $name = delete $args->{hostname};
 
     # FIXME: verify the status can't be 'alive' if we can't get to ip:port
 
-    # delete any keys that aren't useful (populated)
-    foreach my $key (keys %args) {
-        delete $args{$_}
-            unless $args{$_};
-    }
-
     # now modify the host
     my $mogadm = mogadm();
-    $mogadm->update_host($name, \%args);
+    $mogadm->update_host($name, $args);
     if ($mogadm->err) {
         fail("Failure modifying host: " . $mogadm->errstr);
     }
@@ -372,8 +396,8 @@ sub cmd_host_modify {
 }
 
 sub cmd_host_delete {
-    my $name = shift();
-    cmd_help_die() unless $name;
+    my $args = shift;
+    my $name = delete $args->{hostname};
 
     # now modify the host
     my $mogadm = mogadm();
@@ -386,13 +410,10 @@ sub cmd_host_delete {
 }
 
 sub cmd_host_mark {
-    my $name = shift;
-    my $status = shift;
-    cmd_help_die() unless $name && $status;
+    my $args = shift;
 
-    # now modify
     my $mogadm = mogadm();
-    $mogadm->update_host($name, { status => $status });
+    $mogadm->update_host($args->{hostname}, { status => $args->{status} });
     if ($mogadm->err) {
         fail("Failure updating host status: " . $mogadm->errstr);
     }
@@ -613,7 +634,7 @@ sub abortWithUsage {
         foreach my $v (sort keys %$sbc) {
             my $scv = $usage->{$cmd}{subcmd}{$v};
             $ret .= "       ";
-            my $dotdot = $scv->{subcmd} ? "..." : "";
+            my $dotdot = $scv->{args} ? "..." : "";
             $ret .= sprintf("  %-25s %-s\n",
                             "$cmd $v $dotdot",
                             $scv->{des} || "");
@@ -625,21 +646,30 @@ sub abortWithUsage {
 }
 
 sub abort_with_topcmd_help {
-    my ($cmd, $verb) = @_;
+    my ($cmd, $verb, $msg) = @_;
+    if ($msg) {
+        print "\nERROR: $msg\n\n";
+    }
     my $cmdsfx = $verb ? "-$verb" : "";
-    my $ret = "Help for '$cmd$cmdsfx' command:\n (enter any command prefix, leaving off options, for further help)\n\n";
-    foreach my $subcmd (sort keys %{$usage->{$cmd}{subcmd}}) {
-        next if $verb && $verb ne $subcmd;
-        my $scv = $usage->{$cmd}{subcmd}{$subcmd};
+    my $ret = "Help for '$cmd$cmdsfx' command:\n";
+    unless ($verb) {
+        $ret .= " (enter any command prefix, leaving off options, for further help)\n";
+    }
+    $ret .= "\n";
+    foreach my $subcmdv (sort keys %{$usage->{$cmd}{subcmd}}) {
+        next if $verb && $verb ne $subcmdv;
+        my $scv = $usage->{$cmd}{subcmd}{$subcmdv};
         $ret .= sprintf("  %-40s %-s\n",
-                        "mogadm $cmd $subcmd $scv->{subcmd}",
+                        "mogadm $cmd $subcmdv $scv->{args}",
                         $scv->{des});
     }
     print $ret, "\n";
     exit 1;
 }
+
 sub cmd_help_die {
-    abort_with_topcmd_help($topcmd, $verb);
+    my ($msg) = @_;
+    abort_with_topcmd_help($topcmd, $verb, $msg);
 }
 
 
