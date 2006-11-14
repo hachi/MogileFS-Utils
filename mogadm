@@ -216,6 +216,10 @@ if (my $args = $cmdinfo->{args}) {
         if ($arg =~ /^<(.+)>$/) {
             my $argname = $1;
             my $val = shift @ARGV;
+            # map e.g. "dev5" to 5
+            if ($argname eq "devid" && $val && $val =~ /^dev(\d+)$/) {
+                $val = $1;
+            }
             $badargs->("Missing argument '$argname'") unless $val;
             $badargs->("Unexpected option.  Expected argument '$argname'") if $val =~ /^-/;
             $cmdargs{$argname} = $val;
@@ -690,11 +694,22 @@ sub abort_with_topcmd_help {
     foreach my $subcmdv (sort keys %{$usage->{$cmd}{subcmd}}) {
         next if $verb && $verb ne $subcmdv;
         my $scv = $usage->{$cmd}{subcmd}{$subcmdv};
-        $ret .= sprintf("  %-40s %-s\n",
+        $ret .= sprintf("  %-50s %-s\n",
                         "mogadm $cmd $subcmdv $scv->{args}",
                         $scv->{des});
     }
     print $ret, "\n";
+    if ($verb) {
+        my $scv = $usage->{$cmd}{subcmd}{$verb};
+        foreach my $opt (sort {
+            (substr($b, 0, 1) cmp substr($a, 0, 1)) ||
+                $a cmp $b
+        } keys %{$scv->{opts} || {}})
+        {
+            printf("      %-20s %s\n", $opt, $scv->{opts}->{$opt});
+        }
+        print "\n";
+    }
     exit 1;
 }
 
@@ -776,10 +791,6 @@ sub ok {
         print STDOUT $_[0] . "\n" if $_[0];
     }
     exit 0;
-}
-
-sub mogfs {
-
 }
 
 sub mogadm {
@@ -1013,8 +1024,8 @@ Host manipulation:
 Device manipulation:
 
     $ mogadm device list
-    $ mogadm device add foo.local
-    $ mogadm device add foo.local 17
+    $ mogadm device add foo.local 16
+    $ mogadm device add foo.local 17 --status=alive
     $ mogadm device mark foo.local 17 down
     $ mogadm device delete foo.local 17
 
