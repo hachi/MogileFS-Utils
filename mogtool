@@ -1,4 +1,7 @@
 #!/usr/bin/perl
+
+eval 'exec /usr/bin/perl  -S $0 ${1+"$@"}'
+    if 0; # not running under some shell
 ############################################################################
 
 =head1 NAME
@@ -33,6 +36,7 @@ mogtool -- Inject/extract data to/from a MogileFS installation
     $ mogtool delete thekey
 
     $ mogtool list
+    $ mogtool listkey
 
 =head1 GENERAL OPTIONS
 
@@ -89,6 +93,12 @@ Delete a resource.  See L</"DELETE OPTIONS"> and L</"DELETE ARGUMENTS">.
 =item list|ls
 
 List all big files contained in MogileFS.  No options, no arguments.
+
+=item listkey|lsk key
+
+List all files which match the key. Key is just a prefix, and this will list
+all keys which match the prefix. So if you specify key as "ABC1" then you'll
+get all keys which start with the characters "ABC1"
 
 =back
 
@@ -148,7 +158,7 @@ you are noticing mogtool spend most of it's time waiting for children and not
 actually buffering data, you may wish to raise this number.  The default is 1
 but we've found 3 or 4 work well.
 
-=item 
+=item
 
 =back
 
@@ -393,6 +403,12 @@ Delete a chunked file--this deletes all chunks and the receipt, so the file is g
 Lists all large files stored in MogileFS.  It is not possible to list all normal files
 at this time.
 
+=head2 Listing Files Matching a Key
+
+    $ mogtool listkey abc1
+
+Lists all files in MogileFS whose keys start with the characters "abc1".
+
 =head1 CONFIGURATION FILE
 
 Instead of adding a ton of options to the command line every time, mogtool enables
@@ -530,12 +546,15 @@ foreach my $conf (@confs) {
 if ($opts{lib}) {
     eval "use lib '$opts{lib}';";
 }
-eval "use MogileFS::Client;";
 
 # no trackers and domain..?
 unless ($opts{trackers} && $opts{domain}) {
     abortWithUsage();
 }
+
+eval qq{
+    use MogileFS::Client; 1
+} or die "Failed to load MogileFS::Client module: $@\n";
 
 # init connection to mogile
 my $mogfs = get_mogfs();
@@ -545,6 +564,7 @@ my $cmd = shift;
 inject() if $cmd eq 'i' || $cmd eq "inject";
 extract() if $cmd eq 'x' || $cmd eq "extract";
 list() if $cmd eq 'ls' || $cmd eq "list";
+listkey() if $cmd eq 'lsk' || $cmd eq "listkey";
 mdelete() if $cmd eq 'rm' || $cmd eq "delete";
 
 # fail if we get this far
@@ -1047,7 +1067,7 @@ sub _parse_info {
             md5 => $3,
             paths => [ split(/\s*,\s*/, $4) ],
         };
-    } 
+    }
 
     return $res;
 }
@@ -1167,7 +1187,7 @@ sub extract {
                                  #=>  .   (to untar)     (if compressed, do nothing???, make .tar.gz file -- unless they use -z again?)
                                  #=> /dev/sda4  (but check /proc/partitions that it's big enough)  (if compress, Compress::Zlib to ungzip
 #                                 => foo.jpg  (write it to a file)
-    
+
 
     # now check
     exit 0;
@@ -1184,6 +1204,28 @@ sub list {
             next unless $key =~ /^_big_info:(.+)$/;
 
             $key = $1;
+            $ct++;
+
+            print "$key\n";
+        }
+    }
+    print "#$ct files found\n";
+    exit 0;
+}
+
+sub listkey {
+
+    my $key_pattern = shift(@ARGV);
+    abortWithUsage() unless $key_pattern;
+
+    # list all files matchine a key
+    my ($ct, $after, $list);
+    while (($after, $list) = $mogfs->list_keys("$key_pattern", $after)) {
+        last unless $list && @$list;
+
+        # now extract the key and dump it
+        foreach my $key (@$list) {
+
             $ct++;
 
             print "$key\n";
@@ -1257,12 +1299,12 @@ General options:
   * --class=<class>
 
   * --conf=<file>        Location of config file listing trackers, default
-	                 domain, and default class
+                         domain, and default class
 
                          Default: ~/.mogilefs, /etc/mogilefs/mogilefs.conf
 
-  * --bigfile | -b       Tell mogtool to split file into 64MB chunks and 
-	                 checksum the chunks,
+  * --bigfile | -b       Tell mogtool to split file into 64MB chunks and
+                         checksum the chunks,
 
   * --gzip    | -z       Use gzip compression/decompression
 
@@ -1285,13 +1327,13 @@ Valid i-opts:
     --receipt=email Send a receipt to the specified email address
     --verify       Make sure things replicate and then check the MD5s?
     --des=string   Set the file description
-                   
+
 
 $ mogtool [opts] extract <key> {<file>,<dir>,<device>}
                                   =>  -  (for stdout)    (if compressed, add "z" flag)
                                   =>  .   (to untar)     (if compressed, do nothing???, make .tar.gz file -- unless they use -z again?)
                                   => /dev/sda4  (but check /proc/partitions that it's big enough)  (if compress, Compress::Zlib to ungzip)
-                                  => foo.jpg  (write it to a file)     
+                                  => foo.jpg  (write it to a file)
 
 
 --key
@@ -1317,7 +1359,7 @@ _big_info:<key>
     compressed {0, 1}
     filename  ljbinlog.305.gz
     partblocks  234324324324
-    
+
 
     part 1 <bytes> <md5hex>
     part 2 <bytes> <md5hex>
