@@ -7,7 +7,7 @@ use Getopt::Long;
 use LWP::Simple;  # FIXME: use of this makes 'mog check' hang too long when multiple things down
 use Socket;
 
-my @topcmds = qw(check host device domain class);
+my @topcmds = qw(check host device domain class slave);
 my $usage = {
     check => {
         des => "Check the state of the MogileFS world.",
@@ -141,6 +141,27 @@ my $usage = {
                     "<class>"  => "Class to delete.",
                 },
 
+            },
+        },
+    },
+    slave => {
+        des => 'Manipulate slave database information in a running mogilefsd.',
+        subcmd => {
+            list => {
+                des => 'List current store slave nodes.',
+            },
+            add => {
+                des => 'Add a slave node for store usage',
+                args => '<slave_key> [opts]',
+                opts => {
+                    '--dsn=s' => "DBI DSN specifying what database to connect to.",
+                    '--username=s' => "DBI username for connecting.",
+                    '--password=s' => "DBI password for connecting.",
+                },
+            },
+            delete => {
+                des => 'Delete a slave node for store usage',
+                args => '<slave_key>',
             },
         },
     },
@@ -649,6 +670,47 @@ sub cmd_device_list {
     }
 
     ok();
+}
+
+sub cmd_slave_list {
+    my $mogadm = mogadm();
+
+    my $slaves = $mogadm->slave_list();
+
+    foreach my $key (sort keys %$slaves) {
+        my $slavedata = $slaves->{$key};
+        my ($dsn, $username, $password) = @$slavedata;
+        print "$key --dsn=$dsn --username=$username --password=$password\n";
+    }
+
+    ok();
+}
+
+sub cmd_slave_add {
+    my $mogadm = mogadm();
+    my $args = shift;
+
+    my $rc = $mogadm->slave_add($args->{slave_key}, $args->{dsn}, $args->{username}, $args->{password});
+
+    if ($rc) {
+        ok("Slave added");
+    } else {
+        fail("Slave failed to be added");
+    }
+}
+
+sub cmd_slave_delete {
+    my $mogadm = mogadm();
+
+    my $args = shift;
+
+    my $rc = $mogadm->slave_delete($args->{slave_key});
+
+    if ($rc) {
+        ok("Slave deleted");
+    } else {
+        fail("Slave delete failed");
+    }
 }
 
 ###########################################################################
