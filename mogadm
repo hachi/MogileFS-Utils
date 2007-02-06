@@ -159,6 +159,15 @@ my $usage = {
                     '--password=s' => "DBI password for connecting.",
                 },
             },
+            modify => {
+                des => 'Modify a slave node for store usage',
+                args => '<slave_key> [opts]',
+                opts => {
+                    '--dsn=s' => "DBI DSN specifying what database to connect to.",
+                    '--username=s' => "DBI username for connecting.",
+                    '--password=s' => "DBI password for connecting.",
+                },
+            },
             delete => {
                 des => 'Delete a slave node for store usage',
                 args => '<slave_key>',
@@ -696,6 +705,21 @@ sub cmd_slave_add {
         ok("Slave added");
     } else {
         fail("Slave failed to be added");
+    }
+}
+
+sub cmd_slave_modify {
+    my $mogadm = mogadm();
+    my $args = shift;
+
+    my $key = delete $args->{slave_key} or cmd_help_die("Key argument is required");
+
+    my $rc = $mogadm->slave_modify($key, %$args);
+
+    if ($rc) {
+        ok("Slave modify success");
+    } else {
+        fail("Slave modify failure: " . $mogadm->errstr);
     }
 }
 
