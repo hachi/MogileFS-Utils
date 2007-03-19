@@ -308,7 +308,7 @@ sub cmd_check {
     $| = 1;
     print "Checking trackers...\n";
     foreach my $t (@{$opts{trackers}}) {
-        print "\t$t ... ";
+        print "  $t ... ";
         my $mogadm = mogadm($t);
         if ($mogadm) {
             my $lhosts = hosts($mogadm);
@@ -333,7 +333,7 @@ sub cmd_check {
     print "Checking hosts...\n";
     my @urls;
     foreach my $hostid (sort { $a <=> $b } keys %$hosts) {
-        printf "\t[%2d] %s ... ", $hostid, $hosts->{$hostid}->{hostname};
+        printf "  [%2d] %s ... ", $hostid, $hosts->{$hostid}->{hostname};
         if ($hosts->{$hostid}->{status} eq 'alive') {
             my $url = 'http://' . $hosts->{$hostid}->{hostip} . ':' . $hosts->{$hostid}->{http_port} . '/';
             my $file = get($url);
@@ -354,14 +354,14 @@ sub cmd_check {
 
     # step 3: check devices for each host
     print "Checking devices...\n";
-    printf "\thost device         %10s %10s %10s %7s\n", 'size(G)', 'used(G)', 'free(G)', 'use% ';
-    printf "\t---- --------------- ---------- ---------- ---------- ------\n";
+    printf "  host device      %10s %10s %10s %7s  %7s   %4s\n", 'size(G)', 'used(G)', 'free(G)', 'use% ', 'ob state', 'I/O%';
+    printf "  ---- ------------ ---------- ---------- ---------- ------ ---------- -----\n";
     my %total;
     foreach my $hosturl (@urls) {
         my ($hostid, $url) = @$hosturl;
         my $devs = $devices->{$hostid};
         foreach my $devid (sort { $a <=> $b } keys %$devs) {
-            printf "\t[%2d] %-10s", $hostid, "dev$devid";
+            printf "  [%2d] %-7s", $hostid, "dev$devid";
 
             my $usage = get($url . "/dev$devid/usage");
             if (defined $usage) {
@@ -375,15 +375,15 @@ sub cmd_check {
                 $total{avail} += $data{avail};
                 $total{total} += $data{total};
 
-                printf "     %10.3f %10.3f %10.3f %6.2f%%\n", (map { $data{$_} } qw(total used avail)), $pct;
+                printf "     %10.3f %10.3f %10.3f %6.2f%%  %-7s %5.1f\n", (map { $data{$_} } qw(total used avail)), $pct, $devs->{$devid}->{observed_state}, ($devs->{$devid}->{utilization} || 0);
             } else {
                 print "REQUEST FAILURE\n";
             }
         }
     }
     my $pct = $total{used}/$total{total}*100;
-    printf "\t---- --------------- ---------- ---------- ---------- ------\n";
-    printf "\t              total:%10.3f %10.3f %10.3f %6.2f%%\n", (map { $total{$_} } qw(total used avail)), $pct;
+    printf "  ---- ------------ ---------- ---------- ---------- ------\n";
+    printf "             total:%10.3f %10.3f %10.3f %6.2f%%\n", (map { $total{$_} } qw(total used avail)), $pct;
 
     # if we get here, all's well
     ok();
