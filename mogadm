@@ -375,7 +375,10 @@ sub cmd_check {
                 $total{avail} += $data{avail};
                 $total{total} += $data{total};
 
-                printf "     %10.3f %10.3f %10.3f %6.2f%%  %-7s %5.1f\n", (map { $data{$_} } qw(total used avail)), $pct, $devs->{$devid}->{observed_state}, ($devs->{$devid}->{utilization} || 0);
+                printf("     %10.3f %10.3f %10.3f %6.2f%%  %-7s %5.1f\n",
+                       (map { $data{$_} } qw(total used avail)),
+                       $pct, ($devs->{$devid}->{observed_state} || "?"),
+                       ($devs->{$devid}->{utilization} || 0));
             } else {
                 print "REQUEST FAILURE\n";
             }
