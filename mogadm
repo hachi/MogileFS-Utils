@@ -785,6 +785,27 @@ sub cmd_fsck_reset {
     ok("fsck stopped");
 }
 
+sub cmd_fsck_clearlog {
+    my $mogadm = mogadm();
+    my $res = $mogadm->fsck_clearlog || fail($mogadm->errstr);
+    ok("fsck log cleared");
+}
+
+sub cmd_fsck_printlog {
+    my $mogadm = mogadm();
+    fail("TODO: not implemented");
+}
+
+sub cmd_fsck_taillog {
+    my $mogadm = mogadm();
+    fail("TODO: not implemented");
+}
+
+sub cmd_fsck_status {
+    my $mogadm = mogadm();
+    fail("TODO: not implemented");
+}
+
 ###########################################################################
 ## helper routines
 ###########################################################################
