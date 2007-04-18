@@ -188,6 +188,10 @@ my $usage = {
             },
             reset => {
                 des => 'Reset fsck position back to the beginning',
+                args => '[opts]',
+                opts => {
+                    '--policy-only' => "Check repl policy (assumed locations); don't stat storage nodes",
+                }
             },
             clearlog => {
                 des => 'Clear the fsck log',
@@ -299,7 +303,8 @@ if (my $opts = $cmdinfo->{opts}) {
         my $k = $_;
         next if $k =~ /^</;  # don't care about these.
         die "BOGUS KEY: '$k'" unless $k =~ /^--([\w\-]+)(=.+)?$/;
-        $getopts{"$1$2"} = \$cmdargs{$1};
+        my ($oname, $type) = ($1, $2 || "");
+        $getopts{"$oname$type"} = \$cmdargs{$1};
     }
     GetOptions(%getopts)
         or abort_with_topcmd_help($topcmd, $verb);
@@ -781,7 +786,11 @@ sub cmd_fsck_stop {
 
 sub cmd_fsck_reset {
     my $mogadm = mogadm();
-    my $res = $mogadm->fsck_reset || fail($mogadm->errstr);
+    my $args = shift;
+    my $res = $mogadm->fsck_reset(
+                                  policy_only => $args->{"policy-only"},
+                                  )
+        or fail($mogadm->errstr);
     ok("fsck stopped");
 }
 
