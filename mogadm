@@ -7,7 +7,7 @@ use Getopt::Long;
 use LWP::Simple;  # FIXME: use of this makes 'mog check' hang too long when multiple things down
 use Socket;
 
-my @topcmds = qw(check host device domain class slave);
+my @topcmds = qw(check host device domain class slave fsck);
 my $usage = {
     check => {
         des => "Check the state of the MogileFS world.",
@@ -172,6 +172,33 @@ my $usage = {
                 des => 'Delete a slave node for store usage',
                 args => '<slave_key>',
             },
+        },
+    },
+    fsck => {
+        des => "Control a background filesystem check operation.",
+        subcmd => {
+            start => {
+                des => 'Start (or resume) background fsck',
+            },
+            stop => {
+                des => 'Stop (pause) background fsck',
+            },
+            status => {
+                des => 'Show fsck status',
+            },
+            reset => {
+                des => 'Reset fsck position back to the beginning',
+            },
+            clearlog => {
+                des => 'Clear the fsck log',
+            },
+            printlog => {
+                des => 'Display the fsck log',
+            },
+            taillog => {
+                des => 'Tail the fsck log',
+            },
+
         },
     },
 };
@@ -740,6 +767,24 @@ sub cmd_slave_delete {
     }
 }
 
+sub cmd_fsck_start {
+    my $mogadm = mogadm();
+    my $res = $mogadm->fsck_start || fail($mogadm->errstr);
+    ok("fsck started");
+}
+
+sub cmd_fsck_stop {
+    my $mogadm = mogadm();
+    my $res = $mogadm->fsck_stop || fail($mogadm->errstr);
+    ok("fsck stopped");
+}
+
+sub cmd_fsck_reset {
+    my $mogadm = mogadm();
+    my $res = $mogadm->fsck_reset || fail($mogadm->errstr);
+    ok("fsck stopped");
+}
+
 ###########################################################################
 ## helper routines
 ###########################################################################
@@ -979,7 +1024,12 @@ mogadm - MogileFS admin tool
 
 =head1 SYNOPSIS
 
-mogadm [config options] <argument(s)> [argument options]
+ $ mogadm [config options] <argument(s)> [argument options]
+
+ $ mogadm
+   ....
+   (prints contextual help, if missing command/arguments)
+   ...
 
 =head1 OPTIONS
 
@@ -1054,6 +1104,18 @@ a domain unless it has no classes and is devoid of files.
 Commands for working with classes.  Please see the L</"CLASS OPTIONS"> section
 for the options to use with add/modify.  Also, delete requires that the class
 have no files in it before it will allow the deletion.
+
+=item B<slave ...>
+
+Add/remove slaves replicating from MogileFS master database.
+
+Run B<mogadm slave> by itself for contextual help.
+
+=item B<fsck ...>
+
+Control a background filesystem check operation.
+
+Run B<mogadm fsck> by itself for contextual help.
 
 =back
 
@@ -1137,28 +1199,36 @@ Check the status of your entire MogileFS system:
 
     $ mogadm check
 
+See all the things mogadm can do:
+
+    $ mogadm
+
+Get help on a sub-command:
+
+    $ mogadm device
+
+
 =head1 CONFIGURATION
 
-It is recommended that you create a configuration file such as C</etc/mogilefs/mogilefs.conf> to
+It is recommended that you create a configuration file such as C</etc/mogilefs/mogilefs.conf> (or at C<~/.mogilefs.conf>) to
 be used for configuration information.  Basically all you need is something like:
 
-    lib = /home/mogilefs/cgi-bin
     trackers = 10.0.0.23:7001, 10.0.0.15:7001
 
-The C<lib> directive needs to point to the directory containing under
-it the relative file C<MogileFS/Admin.pm>.  The trackers directive
-points us at the proper location for finding your trackers.
+    # if MogileFS::Admin files aren't installed in standard places:
+    lib = /home/mogilefs/cgi-bin
 
 Note that these can also be specified on the command line, as per above.
 
 =head1 AUTHOR
 
-Mark Smith E<lt>L<"junior@danga.com">E<gt>.
-Brad Fitzpatrick E<lt>L<"brad@danga.com">E<gt>.
+Brad Fitzpatrick E<lt>L<brad@danga.com>E<gt>
+
+Mark Smith E<lt>L<junior@danga.com>E<gt>
 
 =head1 BUGS
 
-Please report any on the MogileFS mailing list: L<"http://lists.danga.com/mogilefs/">.
+Please report any on the MogileFS mailing list: L<http://lists.danga.com/mogilefs/>.
 
 =head1 LICENSE
 
