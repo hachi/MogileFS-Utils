@@ -7,10 +7,13 @@ use Getopt::Long;
 use LWP::Simple;  # FIXME: use of this makes 'mog check' hang too long when multiple things down
 use Socket;
 
-my @topcmds = qw(check host device domain class slave fsck);
+my @topcmds = qw(check stats host device domain class slave fsck);
 my $usage = {
     check => {
         des => "Check the state of the MogileFS world.",
+    },
+    stats => {
+        des => "Show MogileFS system statistics.",
     },
     host => {
         des => "Add/modify hosts.",
@@ -256,6 +259,9 @@ eval "use MogileFS::Admin; use MogileFS::Client; 1;" or fail_text('cant_find_mod
 if ($topcmd eq 'check') {
     die "Unknown options/arguments to 'check' command.\n" if @ARGV;
     cmd_check();
+} elsif ($topcmd eq 'stats') {
+    die "Unknown options/arguments to 'stats' command.\n" if @ARGV;
+    cmd_stats();
 }
 
 # get the verb
@@ -421,6 +427,52 @@ sub cmd_check {
     printf "             total:%10.3f %10.3f %10.3f %6.2f%%\n", (map { $total{$_} } qw(total used avail)), $pct;
 
     # if we get here, all's well
+    ok();
+}
+
+sub cmd_stats {
+    print "Fetching statistics...\n";
+    my $stats = stats()
+        or fail("Can't fetch stats");
+
+    print "\nStatistics for devices...\n";
+    printf "  %-10s %-10s %10s %10s\n", "device", "host", "files", "status";
+    printf "  ---------- ----------- ---------- ----------\n";
+    foreach my $device (sort { $a <=> $b } keys %{$stats->{devices}}) {
+        my $value = $stats->{devices}->{$device};
+        printf "  %-10s %-10s %10s %10s\n", "dev$device", $value->{host}, $value->{files}, $value->{status};
+    }
+    printf "  ---------- ----------- ---------- ----------\n";
+
+    print "\nStatistics for file ids...\n";
+    printf "  Max file id: %s\n", $stats->{fids}->{max};
+
+    print "\nStatistics for files...\n";
+    printf "  %-20s %-10s %10s\n", 'domain', 'class', 'files';
+    printf "  -------------------- ----------- ----------\n";
+    foreach my $domain (sort keys %{$stats->{files}}) {
+        my $classes = $stats->{files}->{$domain};
+        foreach my $class (sort keys %$classes) {
+            my $files = $classes->{$class};
+            printf "  %-20s %-10s %10s\n", $domain, $class, $files;
+        }
+    }
+    printf "  -------------------- ----------- ----------\n";
+
+    print "\nStatistics for replication...\n";
+    printf "  %-20s %-10s %10s %10s\n", 'domain', 'class', 'devcount', 'files';
+    printf "  -------------------- ----------- ---------- ----------\n";
+    foreach my $domain (sort keys %{$stats->{replication}}) {
+        my $classes = $stats->{replication}->{$domain};
+        foreach my $class (sort keys %$classes) {
+            my $devcounts = $classes->{$class};
+            foreach my $devcount (sort { $a <=> $b } keys %$devcounts) {
+                my $files = $devcounts->{$devcount};
+                printf "  %-20s %-10s %10s %10s\n", $domain, $class, $devcount, $files;
+            }
+        }
+    }
+    printf "  -------------------- ----------- ---------- ----------\n";
     ok();
 }
 
@@ -971,6 +1023,16 @@ sub mogadm {
     return $mogadm;
 }
 
+sub stats {
+    my $mogadm = shift() || mogadm();
+    my $res;
+    eval {
+        $res = $mogadm->get_stats();
+    };
+    return undef if $@;
+    return $res;
+}
+    
 sub hosts_byname {
     my $mogadm = shift() || mogadm();
     fail_text('no_mogadm') unless $mogadm;
@@ -1228,6 +1290,10 @@ Class manipulation
 Check the status of your entire MogileFS system:
 
     $ mogadm check
+    
+Check MogileFS system statistics:
+
+    $ mogadm stats
 
 See all the things mogadm can do:
 
@@ -1255,6 +1321,8 @@ Note that these can also be specified on the command line, as per above.
 Brad Fitzpatrick E<lt>L<brad@danga.com>E<gt>
 
 Mark Smith E<lt>L<junior@danga.com>E<gt>
+
+Leon Brocard E<lt>L<acme@astray.com>E<gt>, open sourced permissions from Foxtons Ltd.
 
 =head1 BUGS
 
