@@ -852,20 +852,94 @@ sub cmd_fsck_clearlog {
     ok("fsck log cleared");
 }
 
-sub cmd_fsck_printlog {
+sub _log_dump {
+    my %opts   = @_;
+    my $max    = $opts{start};
     my $mogadm = mogadm();
-    fail("TODO: not implemented");
+
+    my $fmt = "%-20s %5s %13s %10s\n";
+    printf($fmt, "unixtime", "event", "fid", "devid");
+    while (1) {
+        my @rows = $mogadm->fsck_log_rows(after_logid => $max);
+        unless (@rows) {
+            $opts{on_stall}->();
+            next;
+        }
+        foreach my $row (@rows) {
+            printf($fmt,
+                   $row->{utime},
+                   $row->{evcode},
+                   $row->{fid},
+                   $row->{devid} || "-");
+            $max = $row->{logid};
+        }
+    }
+}
+
+sub cmd_fsck_printlog {
+    _log_dump(start     => 0,
+              on_stall => sub { exit 0; });
 }
 
 sub cmd_fsck_taillog {
     my $mogadm = mogadm();
-    fail("TODO: not implemented");
+    my $status = $mogadm->fsck_status
+        or fail("can't get fsck status");
+    _log_dump(start     => $status->{max_logid} - 20,
+              on_stall => sub { sleep 5; });
 }
 
 sub cmd_fsck_status {
     my $mogadm = mogadm();
-    require Data::Dumper;
-    print Data::Dumper::Dumper($mogadm->fsck_status);
+    my $status = $mogadm->fsck_status
+        or fail("can't get fsck status");
+
+    my %known = map { $_ => 1 } qw(
+                                   current_time
+                                   max_logid
+                                   );
+    my $st = sub {
+        my $k = shift;
+        $known{$k} = 1;
+        return $status->{$k};
+    };
+
+    my $line = sub {
+        printf("%11s: %-s\n", @_);
+    };
+    print "\n";
+    my $host = $st->('host');
+    $line->("Running", $st->('running') ? "Yes (on $host)" : "No");
+
+    my $ratio = $st->('end_fid') ? ($st->('max_fid_checked') / $st->('end_fid')) : 0;
+    my $perc  = sprintf("%0.02f%%", 100 * $ratio);
+
+    $line->("Status",
+            $st->('max_fid_checked') . " / " . $st->('end_fid')
+            . " ($perc)");
+    my $elap = ($st->('stop_time') || $st->('current_time')) - $st->('start_time');
+    my $as_time = sub {
+        my $s = shift;
+        return int($s) . "s" if $s < 60;
+        return int($s/60) . "m";
+    };
+    my $per_sec = 5;
+    $line->("Time",  sprintf("%s (%d fids/s; %s remain)",
+                             $as_time->($elap),
+                             $per_sec,
+                             $as_time->($elap * (1 - $ratio))));
+
+    $line->("Check Type", ($st->('policy_only') ?
+                           "Repl policy only (skip file checks)" :
+                           "Normal (check policy + files)"));
+
+    if (my @unk = grep { !$known{$_} } sort keys %$status) {
+        print "\n";
+        foreach (@unk) {
+            $line->("[$_]", $status->{$_});
+        }
+    }
+    print "\n";
 }
 
 ###########################################################################
