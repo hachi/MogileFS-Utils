@@ -1,5 +1,4 @@
-  * remove the hard-coded 5 fids/second from "fsck status",
-    and actually calculate it instead.  :)
+  * fix multiple bugs in "fsck status" display/calculations.
 
 2.08 -- 2007-04-20
 
