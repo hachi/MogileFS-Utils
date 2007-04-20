@@ -917,13 +917,15 @@ sub cmd_fsck_status {
     $line->("Status",
             $st->('max_fid_checked') . " / " . $st->('end_fid')
             . " ($perc)");
-    my $elap = ($st->('stop_time') || $st->('current_time')) - $st->('start_time');
+    my $elap = $st->('start_time') ?
+        (($st->('stop_time') || $st->('current_time')) - $st->('start_time')) :
+        0;
     my $as_time = sub {
         my $s = shift;
         return int($s) . "s" if $s < 60;
         return int($s/60) . "m";
     };
-    my $per_sec = 5;
+    my $per_sec = sprintf("%0.1f", $elap ? ($st->('max_fid_checked') / $elap) : 0);
     $line->("Time",  sprintf("%s (%d fids/s; %s remain)",
                              $as_time->($elap),
                              $per_sec,
