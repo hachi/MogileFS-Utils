@@ -864,7 +864,8 @@ sub cmd_fsck_taillog {
 
 sub cmd_fsck_status {
     my $mogadm = mogadm();
-    fail("TODO: not implemented");
+    require Data::Dumper;
+    print Data::Dumper::Dumper($mogadm->fsck_status);
 }
 
 ###########################################################################
