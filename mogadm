@@ -925,11 +925,14 @@ sub cmd_fsck_status {
         return int($s) . "s" if $s < 60;
         return int($s/60) . "m";
     };
-    my $per_sec = sprintf("%0.1f", $elap ? ($st->('max_fid_checked') / $elap) : 0);
+    my $per_sec = $elap ? ($st->('max_fid_checked') / $elap) : 0;
     $line->("Time",  sprintf("%s (%d fids/s; %s remain)",
                              $as_time->($elap),
-                             $per_sec,
-                             $as_time->($elap * (1 - $ratio))));
+                             sprintf("%0.1f", $per_sec),
+                             $as_time->($per_sec ?
+                                        (($st->('end_fid') - $st->('max_fid_checked'))
+                                         / $per_sec) :
+                                        0)));
 
     $line->("Check Type", ($st->('policy_only') ?
                            "Repl policy only (skip file checks)" :
