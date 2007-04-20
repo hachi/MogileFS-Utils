@@ -1,3 +1,5 @@
+^conf/
+
 ^#
 \bCVS\b
 ^MANIFEST\.
@@ -10,4 +12,27 @@ _blib$
 ^MakeMaker-\d
 ^\.exists
 \bdebian\b
-\bconf\b
+\btest\b
+
+# Avoid version control files.
+\bRCS\b
+\bCVS\b
+,v$
+\B\.svn\b
+
+# Avoid Makemaker generated and utility files.
+\bMANIFEST\.bak
+\bMakefile$
+\bblib/
+\bMakeMaker-\d
+\bpm_to_blib$
+
+# Avoid Module::Build generated and utility files.
+\bBuild$
+\b_build/
+
+# Avoid temp and backup files.
+~$
+\.old$
+\#$
+\b\.#

@@ -10,8 +10,10 @@ WriteMakefile(
     ABSTRACT                    => 'MogileFS utilities',
     EXE_FILES                   => ['mogtool', 'mogadm'],
     PREREQ_PM                   => {
-        'LWP::Simple' => 0,
-        'Compress::Zlib' => 0,
+        'LWP::Simple'      => 0,
+        'Compress::Zlib'   => 0,
+        'MogileFS::Client' => '1.06',
     },
 );
+
 

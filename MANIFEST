@@ -1,4 +1,5 @@
 MANIFEST
+MANIFEST.SKIP
 Changes
 Makefile.PL
 mogtool
