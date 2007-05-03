@@ -1,3 +1,8 @@
+2.09 -- 2007-05-03
+
+  * 'settings list' and 'settings set <key> <value>' sub-commands, if you have
+    MogileFS::Client >= 1.07 installed.  otherwise just unavailable.
+
   * fix multiple bugs in "fsck status" display/calculations.
 
 2.08 -- 2007-04-20

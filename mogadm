@@ -7,13 +7,25 @@ use Getopt::Long;
 use LWP::Simple;  # FIXME: use of this makes 'mog check' hang too long when multiple things down
 use Socket;
 
-my @topcmds = qw(check stats host device domain class slave fsck);
+my @topcmds = qw(check stats host device domain class slave fsck settings);
 my $usage = {
     check => {
         des => "Check the state of the MogileFS world.",
     },
     stats => {
         des => "Show MogileFS system statistics.",
+    },
+    settings => {
+        des => "Change/list server settings.",
+        subcmd => {
+            list => {
+                des => "List all server settings",
+            },
+            set => {
+                args => "<key> <value>",
+                des => "Set server setting 'key' to 'value'.",
+            }
+        },
     },
     host => {
         des => "Add/modify hosts.",
@@ -288,7 +300,7 @@ if (my $args = $cmdinfo->{args}) {
             if ($argname eq "devid" && $val && $val =~ /^dev(\d+)$/) {
                 $val = $1;
             }
-            $badargs->("Missing argument '$argname'") unless $val;
+            $badargs->("Missing argument '$argname'") unless $val || (defined $val && $val eq "0");
             $badargs->("Unexpected option.  Expected argument '$argname'") if $val =~ /^-/;
             $cmdargs{$argname} = $val;
         } elsif ($arg eq "[opts]") {
@@ -946,6 +958,31 @@ sub cmd_fsck_status {
     }
     print "\n";
 }
+
+sub cmd_settings_list {
+    my $mogadm = mogadm();
+    unless ($mogadm->can("server_settings")) {
+        fail("settings commands require MogileFS::Client >= 1.07");
+    }
+    my $ss = $mogadm->server_settings
+        or fail("can't get settings");
+    foreach my $k (sort keys %$ss) {
+        printf("%25s = %-s\n", $k, $ss->{$k});
+    }
+}
+
+sub cmd_settings_set {
+    my $mogadm = mogadm();
+    unless ($mogadm->can("set_server_setting")) {
+        fail("settings commands require MogileFS::Client >= 1.07");
+    }
+    my $args = shift;
+
+    $mogadm->set_server_setting($args->{key}, $args->{value})
+        or fail($mogadm->errstr);
+    ok();
+}
+
 
 ###########################################################################
 ## helper routines
