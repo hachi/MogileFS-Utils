@@ -24,7 +24,7 @@ my $usage = {
             set => {
                 args => "<key> <value>",
                 des => "Set server setting 'key' to 'value'.",
-            }
+            },
         },
     },
     host => {
@@ -300,7 +300,7 @@ if (my $args = $cmdinfo->{args}) {
             if ($argname eq "devid" && $val && $val =~ /^dev(\d+)$/) {
                 $val = $1;
             }
-            $badargs->("Missing argument '$argname'") unless $val || (defined $val && $val eq "0");
+            $badargs->("Missing argument '$argname'") unless defined $val;
             $badargs->("Unexpected option.  Expected argument '$argname'") if $val =~ /^-/;
             $cmdargs{$argname} = $val;
         } elsif ($arg eq "[opts]") {
@@ -982,7 +982,6 @@ sub cmd_settings_set {
         or fail($mogadm->errstr);
     ok();
 }
-
 
 ###########################################################################
 ## helper routines
