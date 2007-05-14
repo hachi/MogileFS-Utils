@@ -1,3 +1,10 @@
+2.10 -- 2007-05-14
+
+  * mogadm check no longer shows dead devices
+
+  * mogadm device list no longer shows devices, UNLESS you do:
+    mogadm device list --all
+
   * allow setting a setting to "" (empty string)
 
 2.09 -- 2007-05-03

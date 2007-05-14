@@ -5,7 +5,7 @@ use ExtUtils::MakeMaker;
 
 WriteMakefile(
     NAME                        => 'MogileFS-Utils',
-    VERSION                     => '2.09',
+    VERSION                     => '2.10',
     AUTHOR                      => 'Brad Fitzpatrick <brad@danga.com>',
     ABSTRACT                    => 'MogileFS utilities',
     EXE_FILES                   => ['mogtool', 'mogadm'],

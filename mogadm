@@ -81,6 +81,10 @@ my $usage = {
         subcmd => {
             list => {
                 des => "List all devices, for each host.",
+                args => "[opts]",
+                opts => {
+                    "--all"  => "Include dead devices in list.",
+                },
             },
             add => {
                 des  => "Add a device to a host.",
@@ -411,6 +415,10 @@ sub cmd_check {
         my ($hostid, $url) = @$hosturl;
         my $devs = $devices->{$hostid};
         foreach my $devid (sort { $a <=> $b } keys %$devs) {
+            my $dev = $devs->{$devid};
+            my $status = $dev->{status} || "??";
+            next if $status eq "dead";
+
             printf "  [%2d] %-7s", $hostid, "dev$devid";
 
             my $usage = get($url . "/dev$devid/usage");
@@ -427,8 +435,8 @@ sub cmd_check {
 
                 printf("     %10.3f %10.3f %10.3f %6.2f%%  %-7s %5.1f\n",
                        (map { $data{$_} } qw(total used avail)),
-                       $pct, ($devs->{$devid}->{observed_state} || "?"),
-                       ($devs->{$devid}->{utilization} || 0));
+                       $pct, ($dev->{observed_state} || "?"),
+                       ($devs->{utilization} || 0));
             } else {
                 print "REQUEST FAILURE\n";
             }
@@ -755,6 +763,8 @@ sub cmd_device_mark {
 }
 
 sub cmd_device_list {
+    my $args = shift;
+
     my $hosts = hosts();
     fail_text('no_hosts') unless $hosts;
 
@@ -768,6 +778,8 @@ sub cmd_device_list {
         printf "%6s  %-10s %7s %7s %7s\n", '', '', 'used(G)', 'free(G)', 'total(G)';
         foreach my $devid (sort keys %{$devs->{$hostid} || {}}) {
             my $dev = $devs->{$hostid}->{$devid};
+            next if $dev->{status} eq "dead" && ! $args->{all};
+
             my $total = $dev->{mb_total} / 1024;
             my $used = $dev->{mb_used} / 1024;
             my $free = $total - $used;
