@@ -1,3 +1,8 @@
+2.11 -- 2007-06-19
+
+  * utilization column was always 0.  single character typo from
+    Arjan <info@bouncetek.com>
+
 2.10 -- 2007-05-14
 
   * mogadm check no longer shows dead devices

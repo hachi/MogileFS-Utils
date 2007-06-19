@@ -436,7 +436,7 @@ sub cmd_check {
                 printf("     %10.3f %10.3f %10.3f %6.2f%%  %-7s %5.1f\n",
                        (map { $data{$_} } qw(total used avail)),
                        $pct, ($dev->{observed_state} || "?"),
-                       ($devs->{utilization} || 0));
+                       ($dev->{utilization} || 0));
             } else {
                 print "REQUEST FAILURE\n";
             }
