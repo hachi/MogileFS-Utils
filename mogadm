@@ -471,7 +471,7 @@ sub cmd_stats {
     printf "  ---------- ----------- ---------- ----------\n";
 
     print "\nStatistics for file ids...\n";
-    printf "  Max file id: %s\n", $stats->{fids}->{max};
+    printf "  Max file id: %s\n", $stats->{fids}->{max} || 'none';
 
     print "\nStatistics for files...\n";
     printf "  %-20s %-10s %10s\n", 'domain', 'class', 'files';
