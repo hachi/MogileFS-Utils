@@ -86,6 +86,13 @@ my $usage = {
                     "--all"  => "Include dead devices in list.",
                 },
             },
+            summary => {
+                des => "List the summary of devices, for each host.",
+                args => "[opts]",
+                opts => {
+                    "--status=s"  => "Devices of status A. Defaults to 'alive,readonly'",
+                },
+            },
             add => {
                 des  => "Add a device to a host.",
                 args => "<hostname> <devid> [opts]",
@@ -798,6 +805,41 @@ sub cmd_device_list {
     ok();
 }
 
+sub cmd_device_summary {
+    my $args = shift;
+    my %state; 
+    for(split /,/,($args->{status} || "alive,readonly")) { $state{$_} = 1 };
+    
+
+    my $hosts = hosts();
+    fail_text('no_hosts') unless $hosts;
+
+    my $devs = devices();
+    fail_text('no_devices') unless $devs;
+
+    printf "%-15s %6s %7s  %7s %7s %7s\n", 'Hostname', 'HostID', 'Status', 'used(G)', 'free(G)', 'total(G)';
+    foreach my $hostid (sort keys %$hosts) {
+        my $host = $hosts->{$hostid};
+        my ($total,$used) = (0)x3;
+
+        foreach my $devid (sort keys %{$devs->{$hostid} || {}}) {
+            my $dev = $devs->{$hostid}->{$devid};
+            next unless exists($state{$dev->{status}});
+
+            my $devtotal = $dev->{mb_total} / 1024;
+            my $devused = $dev->{mb_used} / 1024;
+            $total += $devtotal;
+            $used += $devused;
+        }
+        my $free = $total - $used;
+        printf "%-15s [%4d]: %6s",$host->{hostname},$hostid,$host->{status};
+        printf "  %-7.3f %-7.3f %-7.3f\n", $used, $free, $total;
+    }
+
+    ok();
+
+}
+
 sub cmd_slave_list {
     my $mogadm = mogadm();
 
@@ -1402,6 +1444,8 @@ Host manipulation:
 Device manipulation:
 
     $ mogadm device list
+    $ mogadm device summary
+    $ mogadm device summary --status=dead,down
     $ mogadm device add foo.local 16
     $ mogadm device add foo.local 17 --status=alive
     $ mogadm device mark foo.local 17 down
