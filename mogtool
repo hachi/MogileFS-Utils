@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-
+# vim:ts=4 sw=4 et ft=perl:
 eval 'exec /usr/bin/perl  -S $0 ${1+"$@"}'
     if 0; # not running under some shell
 ############################################################################
@@ -34,6 +34,9 @@ mogtool -- Inject/extract data to/from a MogileFS installation
     $ mogtool extract --bigfile thedevkey /dev/hda4
 
     $ mogtool delete thekey
+    
+    $ mogtool locate thekey
+    $ mogtool locate --verify thekey 
 
     $ mogtool list
     $ mogtool listkey
@@ -89,6 +92,10 @@ for how to use extract.
 =item delete|rm
 
 Delete a resource.  See L</"DELETE OPTIONS"> and L</"DELETE ARGUMENTS">.
+
+=item locate|lo key
+
+List the paths to the file identified by the given key.
 
 =item list|ls
 
@@ -242,6 +249,26 @@ The resource is a "big file" and all chunks should be deleted.
 =item key
 
 Specifies the key of the file to delete.
+
+=back
+
+=head1 LOCATE OPTIONS
+
+=over 4
+
+=item --verify
+
+Verify that the returned paths actually contain the file.
+
+=back
+
+=head1 LOCATE ARGUMENTS
+
+=over 4
+
+=item key
+
+Specifies the key of the file to locate
 
 =back
 
@@ -479,6 +506,8 @@ Mark Smith E<lt>junior@danga.comE<gt> - most of the implementation and maintenan
 
 Brad Fitzpatrick E<lt>brad@danga.comE<gt> - concepts and rough draft.
 
+Robin H. Johnson E<lt>robbat2@orbis-terrarum.netE<gt> - locate function.
+
 Copyright (c) 2002-2004 Danga Interactive. All rights reserved.
 
 =cut
@@ -566,6 +595,7 @@ extract() if $cmd eq 'x' || $cmd eq "extract";
 list() if $cmd eq 'ls' || $cmd eq "list";
 listkey() if $cmd eq 'lsk' || $cmd eq "listkey";
 mdelete() if $cmd eq 'rm' || $cmd eq "delete";
+locate() if $cmd eq 'lo' || $cmd eq "locate";
 
 # fail if we get this far
 abortWithUsage();
@@ -1190,6 +1220,22 @@ sub extract {
 
 
     # now check
+    exit 0;
+}
+
+sub locate {
+    my $key = shift(@ARGV);
+    abortWithUsage() unless $key;
+    $opts{verify} = 1 unless $opts{verify};
+    
+    # list all pathes for the file
+    my $ct = 0;
+    my @paths = grep { defined $_ } $mogfs->get_paths($key, $opts{verify} );
+    foreach my $key (@paths) {
+        $ct++;
+        print "$key\n";
+    }
+    print "#$ct paths found\n";
     exit 0;
 }
 

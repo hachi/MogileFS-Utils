@@ -1,3 +1,5 @@
+  * Add locate task to mogtool that provides path output, useful in debugging.
+  
   * Implement "device summary" per RT#3784. This provides an output with one
     line of storage data per host.
 
