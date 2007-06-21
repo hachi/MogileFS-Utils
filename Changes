@@ -1,3 +1,6 @@
+  * If there are hosts, but no devices, the totals were previously undefined,
+    leading to errors in the output.
+
 2.11 -- 2007-06-19
 
   * utilization column was always 0.  single character typo from

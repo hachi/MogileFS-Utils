@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#
+# vim:ts=4 sw=4 ft=perl et:
 
 use strict;
 use warnings;
@@ -411,6 +411,9 @@ sub cmd_check {
     printf "  host device      %10s %10s %10s %7s  %7s   %4s\n", 'size(G)', 'used(G)', 'free(G)', 'use% ', 'ob state', 'I/O%';
     printf "  ---- ------------ ---------- ---------- ---------- ------ ---------- -----\n";
     my %total;
+    # Initialize to zero so that the total outputs doesn't need to check for undefined.
+    map { $total{$_} = 0; } qw(total used avail);
+
     foreach my $hosturl (@urls) {
         my ($hostid, $url) = @$hosturl;
         my $devs = $devices->{$hostid};
@@ -442,7 +445,10 @@ sub cmd_check {
             }
         }
     }
-    my $pct = $total{used}/$total{total}*100;
+    my $pct = 0;
+    # Avoid division by zero
+    $pct = $total{used}/$total{total}*100 if($total{total} > 0);
+
     printf "  ---- ------------ ---------- ---------- ---------- ------\n";
     printf "             total:%10.3f %10.3f %10.3f %6.2f%%\n", (map { $total{$_} } qw(total used avail)), $pct;
 
