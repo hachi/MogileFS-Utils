@@ -812,9 +812,8 @@ sub cmd_device_list {
 
 sub cmd_device_summary {
     my $args = shift;
-    my %state; 
-    for(split /,/,($args->{status} || "alive,readonly")) { $state{$_} = 1 };
-    
+    my %show_state;
+    $show_state{$_} = 1 foreach split(/,/, ($args->{status} || "alive,readonly"));
 
     my $hosts = hosts();
     fail_text('no_hosts') unless $hosts;
@@ -825,19 +824,20 @@ sub cmd_device_summary {
     printf "%-15s %6s %7s  %7s %7s %7s\n", 'Hostname', 'HostID', 'Status', 'used(G)', 'free(G)', 'total(G)';
     foreach my $hostid (sort keys %$hosts) {
         my $host = $hosts->{$hostid};
-        my ($total,$used) = (0)x3;
+        my ($total,$used) = (0, 0);
 
         foreach my $devid (sort keys %{$devs->{$hostid} || {}}) {
             my $dev = $devs->{$hostid}->{$devid};
-            next unless exists($state{$dev->{status}});
+            next unless $show_state{$dev->{status}};
 
             my $devtotal = $dev->{mb_total} / 1024;
-            my $devused = $dev->{mb_used} / 1024;
+            my $devused  = $dev->{mb_used} / 1024;
+
             $total += $devtotal;
-            $used += $devused;
+            $used  += $devused;
         }
         my $free = $total - $used;
-        printf "%-15s [%4d]: %6s",$host->{hostname},$hostid,$host->{status};
+        printf "%-15s [%4d]: %6s", $host->{hostname}, $hostid, $host->{status};
         printf "  %-7.3f %-7.3f %-7.3f\n", $used, $free, $total;
     }
 
