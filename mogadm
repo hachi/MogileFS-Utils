@@ -434,9 +434,10 @@ sub cmd_check {
             my $usage = get($url . "/dev$devid/usage");
             if (defined $usage) {
                 my %data = ( map { split(/:\s+/, $_) } split(/\r?\n/, $usage) );
-                map { 
-                    $data{$_} = 0 if (!$data{$_} || $data{$_} eq '-'); 
-                } qw(time used total avail);
+                foreach (qw(time used total avail)) {
+                    $data{$_} = 0 if (!$data{$_} || 
+                                       $data{$_} !~ /\A\d+(\.\d+)?\Z/); 
+                }
                 $data{age} = $now - $data{time};
                 $data{used} /= 1024**2;
                 $data{total} /= 1024**2;
@@ -447,7 +448,7 @@ sub cmd_check {
                 $total{total} += $data{total};
 
                 $dev->{utilization}  = 0 if (!defined($dev->{utilization}) || 
-                                              $dev->{utilization} eq '-');
+                                              $dev->{utilization} !~ /\A\d+(\.\d+)?\Z/);
                 printf("     %10.3f %10.3f %10.3f %6.2f%%  %-7s %5.1f\n",
                        (map { $data{$_} } qw(total used avail)),
                        $pct, ($dev->{observed_state} || "?"),
