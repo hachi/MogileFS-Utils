@@ -1,3 +1,8 @@
+  * Document return code behavior in the POD.
+
+  * Provide specific return codes for list, listkey and locate when the item
+    was not found.
+
   * Sometimes we get a - when we are expecting a numeric. Force these to zero.
   
   * Add locate task to mogtool that provides path output, useful in debugging.
