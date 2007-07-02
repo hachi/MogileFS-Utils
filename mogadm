@@ -1355,6 +1355,16 @@ Check to ensure that all of the MogileFS system components are functioning
 and that we can contact everybody.  The quickest way of ensuring that the
 entire MogileFS system is functional from the current machine's point of view.
 
+=item B<stats>
+
+Attempt to get statistics for the MogileFS world. This should provide
+statistics on: the number of files present on each device; the number of files
+in each (domain,class) tuple; statistics about present replication devcounts
+and pending replications.
+
+Due to design constraints, the stats command may presently fail if some
+statistic takes too long to generate.
+
 =item B<host add E<lt>hostE<gt> [host options]>
 
 =item B<host modify E<lt>hostE<gt> [host options]>
@@ -1369,19 +1379,19 @@ Functions for manipulating hosts.  For add and modify, host options is in
 the format of normal command line options and can include anything in the
 L</"HOST OPTIONS"> section.
 
-=item B<device add E<lt>hostE<gt> [device id]>
+=item B<device add E<lt>hostE<gt> E<lt>device idE<gt>>
 
 =item B<device mark E<lt>hostE<gt> E<lt>device idE<gt> E<lt>statusE<gt>>
+
+=item B<device modify E<lt>hostE<gt> E<lt>deviceE<gt> [device options]>
 
 =item B<device delete E<lt>hostE<gt> E<lt>deviceE<gt>>
 
 =item B<device list>
 
-Adding, editing, and deleting devices.  The device id is optional in the add
-command: if you provide one, it will be setup using the provided id; else, a
-new id is assigned and provided to you for setting up the device.
-
-When marking devices, the status can be one of {alive|down|dead|readonly}.
+Functions for manipulating devices. For add and modify, device options are in
+the format of normal command line options and can include anything in the
+L</"DEVICE OPTIONS"> section.
 
 =item B<domain add E<lt>domainE<gt>>
 
@@ -1408,13 +1418,45 @@ have no files in it before it will allow the deletion.
 
 Add/remove slaves replicating from MogileFS master database.
 
+TODO: detail this
+
 Run B<mogadm slave> by itself for contextual help.
 
-=item B<fsck ...>
+=item B<fsck printlog>
 
-Control a background filesystem check operation.
+=item B<fsck taillog>
 
-Run B<mogadm fsck> by itself for contextual help.
+=item B<fsck clearlog>
+
+Display or clear the log of fsck events.
+
+=item B<fsck reset [fsck options]>
+
+Reset fsck position back to the beginning.  Please see the L</"FSCK OPTIONS">
+section for options to use with fsck.
+
+=item B<fsck start>
+
+Start (or resume) background fsck from the last checked fid. If you want to
+check every fid, you must call B<fsck reset> before calling start.
+
+=item B<fsck status>
+
+Show the status of the presently active (or last if none active) fsck. This
+includes what FIDs are being checked, time statistics, check type as well as a
+summary of problems encounted so far.
+
+=item B<fsck stop>
+
+Stop (pause) background fsck
+
+=item B<settings list> 
+
+Display all present MogileFS settings.
+
+=item B<settings set E<lt>keyE<gt> E<lt>valueE<gt>>
+
+Set the server setting for 'key' to 'value'.
 
 =back
 
@@ -1446,7 +1488,22 @@ network.
 
 =item B<--status=E<lt>host statusE<gt>>
 
-Valid statuses are one of: alive, down, dead.
+Valid host statuses are one of: alive, down, dead.
+
+=back
+
+=head1 DEVICE OPTIONS
+
+=over 8
+
+=item B<--status=E<lt>device statusE<gt>>
+
+Valid device statuses are one of: alive, dead, down, drain, readonly.
+
+=item B<--weight=E<lt>device weight<gt>>
+
+The weight used in calculation of preferred paths. It must be a positive
+integer.
 
 =back
 
@@ -1458,6 +1515,17 @@ Valid statuses are one of: alive, down, dead.
 
 Number of devices the files in this class should be replicated across.  Can be
 set to anything >= 1.
+
+=back
+
+=head1 FSCK OPTIONS
+
+=over 8
+
+=item B<--policy-only>
+
+Check replication policy (assumed locations) only; don't stat storage nodes for
+actual file presence.
 
 =back
 
@@ -1480,6 +1548,7 @@ Device manipulation:
     $ mogadm device add foo.local 16
     $ mogadm device add foo.local 17 --status=alive
     $ mogadm device mark foo.local 17 down
+    $ mogadm device modify foo.local 17 --status=alive --weight=10
     $ mogadm device delete foo.local 17
 
 Domain manipulation:
@@ -1503,6 +1572,13 @@ Check the status of your entire MogileFS system:
 Check MogileFS system statistics:
 
     $ mogadm stats
+
+Check every file in the entire MogileFS system:
+
+    $ mogadm fsck reset
+    $ mogadm fsck start
+    $ mogadm fsck status
+    $ mogadm fsck printlog
 
 See all the things mogadm can do:
 
@@ -1532,6 +1608,8 @@ Brad Fitzpatrick E<lt>L<brad@danga.com>E<gt>
 Mark Smith E<lt>L<junior@danga.com>E<gt>
 
 Leon Brocard E<lt>L<acme@astray.com>E<gt>, open sourced permissions from Foxtons Ltd.
+
+Robin H. Johnson E<lt>robbat2@orbis-terrarum.netE<gt>
 
 =head1 BUGS
 

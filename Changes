@@ -1,3 +1,5 @@
+  * Update POD documentation for mogadm to state of present code.
+  
   * Add device-modify command for consistency with host/class.
 
   * Document return code behavior in the POD.
