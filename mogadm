@@ -103,12 +103,12 @@ my $usage = {
                 },
             },
             mark => {
-                des  => "Mark a device as {alive,dead,down,readonly}",
+                des  => "Mark a device as {alive,dead,down,drain,readonly}",
                 args => "<hostname> <devid> <status>",
                 opts => {
                     "<hostname>" => "Hostname of device",
                     "<devid>"    => "Numeric devid to modify.",
-                    "<status>"   => "One of {alive,dead,down,readonly}",
+                    "<status>"   => "One of {alive,dead,down,drain,readonly}",
                 },
             },
         },
