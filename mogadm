@@ -847,7 +847,7 @@ sub cmd_device_summary {
     my $devs = devices();
     fail_text('no_devices') unless $devs;
 
-    printf "%-15s %6s %7s  %7s %7s %7s\n", 'Hostname', 'HostID', 'Status', 'used(G)', 'free(G)', 'total(G)';
+    printf "%-15s %6s %7s  %8s %8s %8s\n", 'Hostname', 'HostID', 'Status', 'used(G)', 'free(G)', 'total(G)';
     foreach my $hostid (sort keys %$hosts) {
         my $host = $hosts->{$hostid};
         my ($total,$used) = (0, 0);
@@ -864,7 +864,7 @@ sub cmd_device_summary {
         }
         my $free = $total - $used;
         printf "%-15s [%4d]: %6s", $host->{hostname}, $hostid, $host->{status};
-        printf "  %-7.3f %-7.3f %-7.3f\n", $used, $free, $total;
+        printf "  %8.3f %8.3f %8.3f\n", $used, $free, $total;
     }
 
     ok();
