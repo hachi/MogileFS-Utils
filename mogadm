@@ -111,6 +111,16 @@ my $usage = {
                     "<status>"   => "One of {alive,dead,down,drain,readonly}",
                 },
             },
+            modify => {
+                des => "Modify a device's propereties.",
+                args => "<hostname> <devid> [opts]",
+                opts => {
+                    "<hostname>" => "Hostname of device",
+                    "<devid>"    => "Numeric devid to modify.",
+                    "--status=s" => "One of {alive,dead,down,drain,readonly}",
+                    "--weight=i" => "Postive numeric weight for device",
+                },
+            },
         },
     },
     domain => {
@@ -774,6 +784,21 @@ sub cmd_device_mark {
     $mogadm->change_device_state($args->{hostname},
                                  $args->{devid},
                                  $args->{status});
+    if ($mogadm->err) {
+        fail('Error updating device: ' . $mogadm->errstr);
+    }
+
+    ok('Device updated.');
+}
+
+sub cmd_device_modify {
+    my $args = shift;
+    my $hostname = delete $args->{hostname};
+    my $devid = delete $args->{devid};
+
+    my $mogadm = mogadm();
+    $mogadm->update_device($hostname, $devid, $args);
+
     if ($mogadm->err) {
         fail('Error updating device: ' . $mogadm->errstr);
     }
