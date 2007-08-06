@@ -1,5 +1,7 @@
+2.12 -- 2007-08-06
+
   * Update POD documentation for mogadm to state of present code.
-  
+
   * Add device-modify command for consistency with host/class.
 
   * Document return code behavior in the POD.
@@ -8,9 +10,9 @@
     was not found.
 
   * Sometimes we get a - when we are expecting a numeric. Force these to zero.
-  
+
   * Add locate task to mogtool that provides path output, useful in debugging.
-  
+
   * Implement "device summary" per RT#3784. This provides an output with one
     line of storage data per host.
 
