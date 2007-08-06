@@ -2,6 +2,7 @@ MANIFEST
 MANIFEST.SKIP
 Changes
 Makefile.PL
+lib/MogileFS/Utils.pm
 mogtool
 mogadm
 META.yml                                 Module meta-data (added by MakeMaker)
