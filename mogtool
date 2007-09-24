@@ -39,7 +39,7 @@ mogtool -- Inject/extract data to/from a MogileFS installation
     $ mogtool locate --verify --bigfile thekey 
 
     $ mogtool list
-    $ mogtool listkey
+    $ mogtool listkey key
 
 =head1 GENERAL OPTIONS
 
@@ -599,7 +599,7 @@ if ($opts{lib}) {
 
 # no trackers and domain..?
 unless ($opts{trackers} && $opts{domain}) {
-    abortWithUsage();
+    abortWithUsage("--trackers and --domain configuration required");
 }
 
 eval qq{
@@ -675,7 +675,7 @@ sub error {
 sub inject {
     my $src = shift @ARGV;
     my $key = shift @ARGV;
-    abortWithUsage() unless $src && $key;
+    abortWithUsage("source and key required to inject") unless $src && $key;
 
     # make sure the source exists and the key is valid
     die "Error: source $src doesn't exist.\n"
@@ -1129,7 +1129,7 @@ sub _parse_info {
 sub extract {
     my $key = shift @ARGV;
     my $dest = shift @ARGV;
-    abortWithUsage() unless $key && $dest;
+    abortWithUsage("key and destination required to extract") unless $key && $dest;
 
     error("Error: key $key isn't valid; must not contain spaces or commas.", ERR_FATAL)
         unless $key =~ /^[^\s\,]+$/;
@@ -1249,7 +1249,7 @@ sub extract {
 
 sub locate {
     my $key = shift(@ARGV);
-    abortWithUsage() unless $key;
+    abortWithUsage("key required to locate") unless $key;
     $opts{verify} = 1 unless $opts{verify};
     $opts{bigfile} = 0 unless $opts{big};
    
@@ -1299,7 +1299,7 @@ sub list {
 sub listkey {
 
     my $key_pattern = shift(@ARGV);
-    abortWithUsage() unless $key_pattern;
+    abortWithUsage("key pattern required") unless $key_pattern;
 
     # list all files matchine a key
     my ($ct, $after, $list);
@@ -1323,7 +1323,7 @@ sub listkey {
 
 sub mdelete {
     my $key = shift(@ARGV);
-    abortWithUsage() unless $key;
+    abortWithUsage("key required to delete") unless $key;
 
     # delete simple file
     unless ($opts{big}) {
@@ -1361,12 +1361,11 @@ sub mdelete {
 
 abortWithUsage() if $opts{help};
 
-
 sub abortWithUsage {
     my $msg = join '', @_;
 
     if ( $msg ) {
-        pod2usage( -verbose => 1, -exitval => 1, -message => "$msg" );
+        pod2usage( -verbose => 1, -exitval => 1, -message => "\n$msg\n" );
     } else {
         pod2usage( -verbose => 1, -exitval => 1 );
     }

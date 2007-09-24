@@ -1,3 +1,5 @@
+  * Improve error messages from mogtool (Ask Bjoern Hansen).
+
 2.12 -- 2007-08-06
 
   * Update POD documentation for mogadm to state of present code.
