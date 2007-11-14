@@ -799,21 +799,22 @@ MSG
         my $mogfs = get_mogfs();
         my $dkey = $opts{big} ? "$key,$chunknum" : "$key";
 
-        # TODO: be resilient to transient errors, retry, etc.
         my $start_time = [ gettimeofday() ];
         my $try = 0;
         while (1) {
             $try++;
-            my $fh = $mogfs->new_file($dkey, $opts{class}, $bufsize);
-            unless (defined $fh) {
-                error("WARNING: Unable to create new file '$dkey'.");
-                printf "This was try #$try and it's been %.2f seconds since we first tried.  Retrying...\n", tv_interval($start_time);
-                sleep 1;
-                next;
-            }
-            $fh->print($chunkbuf{$cn});
-            unless ($fh->close) {
-                error("WARNING: Unable to save file '$dkey'.");
+            eval {
+                my $fh = $mogfs->new_file($dkey, $opts{class}, $bufsize);
+                unless (defined $fh) {
+                    die "Unable to create new file";
+                }
+                $fh->print($chunkbuf{$cn});
+                unless ($fh->close) {
+                    die "Close failed";
+                }
+            };
+            if (my $err = $@) {
+                error("WARNING: Unable to save file '$dkey': $err");
                 printf "This was try #$try and it's been %.2f seconds since we first tried.  Retrying...\n", tv_interval($start_time);
                 sleep 1;
                 next;

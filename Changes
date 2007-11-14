@@ -1,3 +1,5 @@
+  * Fix the automatic retry on errors saving a chunk (Ask Bjoern Hansen)
+
   * Improve error messages from mogtool (Ask Bjoern Hansen).
 
 2.12 -- 2007-08-06
