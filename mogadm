@@ -227,6 +227,7 @@ my $usage = {
                 args => '[opts]',
                 opts => {
                     '--policy-only' => "Check repl policy (assumed locations); don't stat storage nodes",
+                    '--startpos=i'  => "FID to start at.",
                 }
             },
             clearlog => {
@@ -944,6 +945,7 @@ sub cmd_fsck_reset {
     my $args = shift;
     my $res = $mogadm->fsck_reset(
                                   policy_only => $args->{"policy-only"},
+                                  startpos => $args->{"startpos"},
                                   )
         or fail($mogadm->errstr);
     ok("fsck stopped");
