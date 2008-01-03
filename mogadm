@@ -246,18 +246,6 @@ my $usage = {
 
 # load up our config files
 my %opts;
-my @configs = ($opts{config}, "$ENV{HOME}/.mogilefs.conf", "/etc/mogilefs/mogilefs.conf");
-foreach my $fn (reverse @configs) {
-    next unless $fn && -e $fn;
-    open FILE, "<$fn"
-        or die "unable to open $fn: $!\n";
-    while (<FILE>) {
-        s/\#.*//;
-        next unless m!^\s*(\w+)\s*=\s*(.+?)\s*$!;
-        $opts{$1} = $2;
-    }
-    close FILE;
-}
 
 Getopt::Long::Configure("require_order", "pass_through");
 GetOptions(
@@ -268,6 +256,19 @@ GetOptions(
         "verbose"    => \$opts{verbose},
     ) or abortWithUsage();
 Getopt::Long::Configure("require_order", "no_pass_through");
+
+my @configs = ($opts{config}, "$ENV{HOME}/.mogilefs.conf", "/etc/mogilefs/mogilefs.conf");
+foreach my $fn (reverse @configs) {
+    next unless $fn && -e $fn;
+    open FILE, "<$fn"
+        or die "unable to open $fn: $!\n";
+    while (<FILE>) {
+        s/\#.*//;
+        next unless m!^\s*(\w+)\s*=\s*(.+?)\s*$!;
+        $opts{$1} = $2 unless ( defined $opts{$1} );
+    }
+    close FILE;
+}
 
 # bail for help
 abortWithUsage() if $opts{help};
