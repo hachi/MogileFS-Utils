@@ -8,6 +8,6 @@ Standards-Version: 3.6.1.0
 Package: mogilefs-utils
 Architecture: all
 Depends: ${perl:Depends}, libcompress-zlib-perl, libwww-perl, libmogilefs-perl
-Description: utilities to manipulate mogileFS filesystems
+Description: utilities to manipulate MogileFS filesystems
  The mogilefs-utils package contains tools to administrate and work with the 
- mogileFS filesystem from Danga Interactive.
+ MogileFS filesystem from Danga Interactive.

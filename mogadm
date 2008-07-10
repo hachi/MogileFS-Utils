@@ -112,13 +112,13 @@ my $usage = {
                 },
             },
             modify => {
-                des => "Modify a device's propereties.",
+                des => "Modify a device's properties.",
                 args => "<hostname> <devid> [opts]",
                 opts => {
                     "<hostname>" => "Hostname of device",
                     "<devid>"    => "Numeric devid to modify.",
                     "--status=s" => "One of {alive,dead,down,drain,readonly}",
-                    "--weight=i" => "Postive numeric weight for device",
+                    "--weight=i" => "Positive numeric weight for device",
                 },
             },
         },
@@ -157,7 +157,7 @@ my $usage = {
                 opts => {
                     "<domain>" => "Domain to add class to.",
                     "<class>"  => "Name of class to add.",
-                    "--mindevcount=i" => "Mininum number of replicas.",
+                    "--mindevcount=i" => "Minimum number of replicas.",
                 },
             },
             modify => {
@@ -166,7 +166,7 @@ my $usage = {
                 opts => {
                     "<domain>" => "Domain to add class to.",
                     "<class>"  => "Name of class to add.",
-                    "--mindevcount=i" => "Mininum number of replicas.",
+                    "--mindevcount=i" => "Minimum number of replicas.",
                 },
             },
             delete => {
@@ -1447,7 +1447,7 @@ check every fid, you must call B<fsck reset> before calling start.
 
 Show the status of the presently active (or last if none active) fsck. This
 includes what FIDs are being checked, time statistics, check type as well as a
-summary of problems encounted so far.
+summary of problems encountered so far.
 
 =item B<fsck stop>
 

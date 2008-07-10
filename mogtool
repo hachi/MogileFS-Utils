@@ -280,7 +280,7 @@ Specifies the key of the file to locate
 
 =item 0
 
-Sucess during operation.
+Success during operation.
 
 =item 1
 
@@ -288,7 +288,7 @@ During the locate, list, or listkey operation, the key was not found.
 
 =item 2
 
-Some fatal error occured.
+Some fatal error occurred.
 
 =back
 
@@ -1169,7 +1169,7 @@ sub extract {
         }
     }
 
-    # several cases.. going to stdout?
+    # several cases.. going to STDOUT?
     if ($dest eq '-') {
         *O = *STDOUT;
     } else {
@@ -1182,7 +1182,7 @@ sub extract {
                 $dest =~ s!^(.+)/!!;
             }
             if (-b $dest) {
-                # if we're targetting a block device...
+                # if we're targeting a block device...
                 warn "FIXME: add in block checking\n";
                 open O, ">$dest"
                     or die "Couldn't open $dest: $!\n";
@@ -1238,7 +1238,7 @@ sub extract {
 
     # now make sure we have enough data
 #$ mogtool [opts] extract <key> {<file>,<dir>,<device>}
-                                 #=>  -  (for stdout)    (if compressed, add "z" flag)
+                                 #=>  -  (for STDOUT)    (if compressed, add "z" flag)
                                  #=>  .   (to untar)     (if compressed, do nothing???, make .tar.gz file -- unless they use -z again?)
                                  #=> /dev/sda4  (but check /proc/partitions that it's big enough)  (if compress, Compress::Zlib to ungzip
 #                                 => foo.jpg  (write it to a file)
@@ -1257,7 +1257,7 @@ sub locate {
     my $dkey = $key;
     $dkey = "_big_info:$key" if $opts{big};
     
-    # list all pathes for the file
+    # list all paths for the file
     my $ct = 0;
     my @paths = [];
     my @paths = grep { defined $_ } $mogfs->get_paths($dkey, $opts{verify} );
@@ -1302,7 +1302,7 @@ sub listkey {
     my $key_pattern = shift(@ARGV);
     abortWithUsage("key pattern required") unless $key_pattern;
 
-    # list all files matchine a key
+    # list all files matching a key
     my ($ct, $after, $list);
     $ct = 0;
     while (($after, $list) = $mogfs->list_keys("$key_pattern", $after)) {
@@ -1416,7 +1416,7 @@ Valid i-opts:
 
 
 $ mogtool [opts] extract <key> {<file>,<dir>,<device>}
-                                  =>  -  (for stdout)    (if compressed, add "z" flag)
+                                  =>  -  (for STDOUT)    (if compressed, add "z" flag)
                                   =>  .   (to untar)     (if compressed, do nothing???, make .tar.gz file -- unless they use -z again?)
                                   => /dev/sda4  (but check /proc/partitions that it's big enough)  (if compress, Compress::Zlib to ungzip)
                                   => foo.jpg  (write it to a file)
