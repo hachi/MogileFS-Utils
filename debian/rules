@@ -8,8 +8,7 @@
 # This is the debhelper compatibility version to use.
 # export DH_COMPAT=4
 
-PACKAGE=`pwd | sed -e "s/.*\/\\(.*\\)-.*/\\1/"`
-SHAREDIR=$(CURDIR)/debian/$(PACKAGE)/usr/share/$(PACKAGE)
+SHAREDIR=debian/tmp
 
 build:
 	dh_testdir
@@ -29,15 +28,14 @@ install:
 	dh_clean -k
 	dh_installdirs
 
-	$(MAKE) PREFIX=$(CURDIR)/debian/$(PACKAGE)/usr OPTIMIZE="-O2 -g -Wall" test install
+	$(MAKE) PREFIX=$(SHAREDIR)/usr OPTIMIZE="-O2 -g -Wall" test install
 
 	# No tests, so we smoke test like this:
 	perl -c mogtool
 
 	install -d $(SHAREDIR)
-	install -m 644 conf/mogtool.conf $(SHAREDIR)/mogtool.conf.default
 	
-	-find $(CURDIR)/debian -type d | xargs rmdir -p --ignore-fail-on-non-empty
+	-find $(SHAREDIR) -type d | xargs rmdir -p --ignore-fail-on-non-empty
 
 binary-arch:;
 binary-indep: build install
@@ -46,6 +44,8 @@ binary-indep: build install
 	dh_installdocs
 	dh_installman
 	dh_installchangelogs
+	dh_install --sourcedir=$(SHAREDIR) --fail-missing
+	dh_installexamples
 	dh_link
 	dh_strip
 	dh_compress

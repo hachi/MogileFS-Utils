@@ -1,0 +1,4 @@
+usr/bin /usr
+usr/share/man/man1 /usr/share/man
+usr/share/man/man3 /usr/share/man
+usr/share/perl5  /usr/share
