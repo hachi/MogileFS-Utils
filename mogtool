@@ -574,6 +574,7 @@ abortWithUsage() unless
                'verify'        => \$opts{verify},
                'description=s' => \$opts{des},
                'concurrent=i'  => \$opts{concurrent},
+               'noreplwait'    => \$opts{noreplwait},
 
                # extract options
                'asfile'        => \$opts{asfile},
@@ -977,9 +978,9 @@ MSG
 
     # verify replication and chunks
     my %paths; # { chunknum => [ path, path, path ... ] }
-    my %still_need = ( %chunkinfo );
+    my %still_need = $opts{noreplwait} ? () : ( %chunkinfo );
     while (%still_need) {
-        print "Beginning replication wait: " . join(' ', sort { $a <=> $b } keys %still_need) . "\n";
+        print "Replicating (disable with --noreplwait): " . join(' ', sort { $a <=> $b } keys %still_need) . "\n";
         sleep 1; # give things time to replicate some
 
         # now iterate over each and get the paths
