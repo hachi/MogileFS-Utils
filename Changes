@@ -1,3 +1,7 @@
+2.13 -- 2008-08-16
+
+  * Add --noreplwait option to mogtool. (Dormando)
+
   * Make mogadm prefer command line settings over configuration file
     settings (Derek Boonstra)
 
