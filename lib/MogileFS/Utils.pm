@@ -21,7 +21,7 @@ Brad Fitzpatrick E<lt>L<brad@danga.com>E<gt>
 
 =head1 BUGS
 
-Please report any on the MogileFS mailing list: L<http://lists.danga.com/mogilefs/>.
+Please report any on the MogileFS mailing list: L<http://groups.google.com/group/mogile/>.
 
 =head1 LICENSE
 
