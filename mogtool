@@ -1058,10 +1058,13 @@ INFO
             or error("ERROR: Unable to save _big_info:$key.", ERR_FATAL);
 
         # verify info file
-        print "Waiting for info file replication...\n";
-        while (1) {
+        print "Waiting for info file replication...\n" unless $opts{noreplwait};
+        while (!$opts{noreplwait}) {
             my @paths = $mogfs->get_paths("_big_info:$key", 1);
-            next unless scalar(@paths) >= 2;
+            if (@paths < 2) {
+                select undef, undef, undef, 0.25;
+                next;
+            }
             foreach my $path (@paths) {
                 my $data = get($path);
                 error("       FATAL: content mismatch on $path", ERR_FATAL)
