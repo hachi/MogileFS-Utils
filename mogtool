@@ -1302,9 +1302,7 @@ sub list {
 }
 
 sub listkey {
-
-    my $key_pattern = shift(@ARGV);
-    abortWithUsage("key pattern required") unless $key_pattern;
+    my $key_pattern = shift(@ARGV) || '';
 
     # list all files matching a key
     my ($ct, $after, $list);

@@ -1,3 +1,5 @@
+  * Allow "listkey" on all files, not good for big dbs (Ask Bjoern Hansen)
+
 2.13 -- 2008-08-16
 
   * Add --noreplwait option to mogtool. (Dormando)
