@@ -1,6 +1,9 @@
 #!/usr/bin/perl
 package MogileFS::Utils;
 
+our $VERSION = '2.13_50';
+
+
 =head1 NAME
 
 MogileFS::Utils - Command line utilities for the MogileFS distributed file system.
