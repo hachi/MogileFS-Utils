@@ -557,7 +557,7 @@ abortWithUsage() unless
                'trackers=s'    => \$opts{trackers},
                'domain=s'      => \$opts{domain},
                'class=s'       => \$opts{class},
-               'config=s'      => \$opts{conf},
+               'config=s'      => \$opts{config},
                'help'          => \$opts{help},
                'debug'         => \$MogileFS::DEBUG,
                'lib'           => \$opts{lib},
@@ -581,14 +581,14 @@ abortWithUsage() unless
                );
 
 # now load the config file?
-my @confs = ( $opts{conf}, "$ENV{HOME}/.mogtool", "/etc/mogilefs/mogtool.conf" );
+my @confs = ( $opts{config}, "$ENV{HOME}/.mogtool", "/etc/mogilefs/mogtool.conf" );
 foreach my $conf (@confs) {
     next unless $conf && -e $conf;
     open FILE, "<$conf";
     foreach (<FILE>) {
         s!#.*!!;
         next unless m!(\w+)\s*=\s*(.+)!;
-        $opts{$1} = $2;
+        $opts{$1} = $2 unless $opts{$1};
     }
     close FILE;
 }

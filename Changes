@@ -1,5 +1,8 @@
   * Allow "listkey" on all files, not good for big dbs (Ask Bjoern Hansen)
 
+  * Make mogtool prefer command line settings over configuration file
+    settings (Ask)
+
 2.13 -- 2008-08-16
 
   * Add --noreplwait option to mogtool. (Dormando)
