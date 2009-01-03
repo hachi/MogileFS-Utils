@@ -978,9 +978,9 @@ MSG
 
     # verify replication and chunks
     my %paths; # { chunknum => [ path, path, path ... ] }
-    my %still_need = $opts{noreplwait} ? () : ( %chunkinfo );
+    my %still_need = ( %chunkinfo );
     while (%still_need) {
-        print "Replicating (disable with --noreplwait): " . join(' ', sort { $a <=> $b } keys %still_need) . "\n";
+        print "Replicating: " . join(' ', sort { $a <=> $b } keys %still_need) . "\n";
         sleep 1; # give things time to replicate some
 
         # now iterate over each and get the paths
@@ -1022,7 +1022,7 @@ MSG
                 }
 
                 # now make sure %paths contains at least 2 verified
-                next unless scalar(@{$paths{$num} || []}) >= 2;
+                next if scalar(@{$paths{$num} || []}) < 2 && !$opts{noreplwait};
                 delete $still_need{$num};
             }
         }
