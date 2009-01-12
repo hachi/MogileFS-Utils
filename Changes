@@ -1,3 +1,7 @@
+2.14 -- 2009-01-12
+
+  * Add --nobigfile option to skip bigfile parsing on large files. (dormando)
+
   * Allow "listkey" on all files, not good for big dbs (Ask Bjoern Hansen)
 
   * Make mogtool prefer command line settings over configuration file
