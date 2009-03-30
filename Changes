@@ -1,3 +1,6 @@
+
+  * Make --noverify a valid option for locate (Ask Bjoern Hansen)
+
   * Make the locate command return all replicas, not just two (Gavin Brebner)
 
 2.14 -- 2009-01-12

@@ -36,8 +36,8 @@ mogtool -- Inject/extract data to/from a MogileFS installation
 
     $ mogtool delete thekey
     
-    $ mogtool locate thekey
-    $ mogtool locate --verify --bigfile thekey 
+    $ mogtool locate --noverify thekey
+    $ mogtool locate --bigfile thekey 
 
     $ mogtool list
     $ mogtool listkey key
@@ -257,7 +257,8 @@ Specifies the key of the file to delete.
 
 =item --verify
 
-Verify that the returned paths actually contain the file.
+Verify that the returned paths actually contain the file.  The locate
+commands defaults to verify, you can disable it with --noverify.
 
 =item --bigfile|-b
 
@@ -573,7 +574,7 @@ abortWithUsage() unless
                'chunksize=s'   => \$opts{chunksize},
                'receipt=s'     => \$opts{receipt},
                'reciept=s'     => \$opts{receipt}, # requested :)
-               'verify'        => \$opts{verify},
+               'verify!'       => \$opts{verify},
                'description=s' => \$opts{des},
                'concurrent=i'  => \$opts{concurrent},
                'noreplwait'    => \$opts{noreplwait},
@@ -1302,7 +1303,7 @@ sub extract {
 sub locate {
     my $key = shift(@ARGV);
     abortWithUsage("key required to locate") unless $key;
-    $opts{verify} = 1 unless $opts{verify};
+    $opts{verify}  = 1 unless defined $opts{verify};
     $opts{bigfile} = 0 unless $opts{big};
    
     my $dkey = $key;
