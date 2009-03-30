@@ -1311,7 +1311,10 @@ sub locate {
     # list all paths for the file
     my $ct = 0;
     my @paths = [];
-    my @paths = grep { defined $_ } $mogfs->get_paths($dkey, $opts{verify} );
+    my @paths = grep { defined $_ }
+    $mogfs->get_paths($dkey,
+		      {verify => $opts{verify}, pathcount => 1024 },
+		      );
     if(@paths == 0 && $mogfs->errstr =~ /unknown_key/) {
         error("Error: bigfile $key doesn't exist (or did you force --bigfile?)", ERR_MISSING) if $opts{big};
         error("Error: file $key doesn't exist (or did you forget --bigfile?)", ERR_MISSING);
