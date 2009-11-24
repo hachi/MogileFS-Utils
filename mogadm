@@ -453,8 +453,9 @@ sub cmd_check {
                 $data{age} = $now - $data{time};
                 $data{used} /= 1024**2;
                 $data{total} /= 1024**2;
-                $data{avail} = $data{total} - $data{used};
-                my $pct = $data{used}/$data{total}*100;
+                $data{available} /= 1024**2;
+                $data{avail} = $data{available};
+                my $pct = 100 - $data{available}/$data{total}*100;
                 $total{used} += $data{used};
                 $total{avail} += $data{avail};
                 $total{total} += $data{total};
@@ -472,7 +473,7 @@ sub cmd_check {
     }
     my $pct = 0;
     # Avoid division by zero
-    $pct = $total{used}/$total{total}*100 if($total{total} > 0);
+    $pct = 100 - $total{avail}/$total{total}*100 if($total{total} > 0);
 
     printf "  ---- ------------ ---------- ---------- ---------- ------\n";
     printf "             total:%10.3f %10.3f %10.3f %6.2f%%\n", (map { $total{$_} } qw(total used avail)), $pct;
