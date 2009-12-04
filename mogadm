@@ -1233,7 +1233,7 @@ sub mogadm {
     # 10 seconds is the max time used for any of the admin locks (fsck status)
     # plus we leave a bit of time for work.
     my $timeout = 15; 
-    $timeout = $opts{timeout} if $opts{timeout} =~ /^[0-9]+$/;
+    $timeout = $opts{timeout} if $opts{timeout} && $opts{timeout} =~ /^[0-9]+$/;
 #    $MogileFS::DEBUG = 2;
     my $mogadm = MogileFS::Admin->new( hosts => $host, timeout => $timeout );
     fail_text('no_mogadm') unless $mogadm;
