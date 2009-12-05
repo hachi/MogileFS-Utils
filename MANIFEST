@@ -5,4 +5,5 @@ Makefile.PL
 lib/MogileFS/Utils.pm
 mogtool
 mogadm
+mogstats
 META.yml                                 Module meta-data (added by MakeMaker)

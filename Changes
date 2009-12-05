@@ -1,3 +1,5 @@
+  * Standalone mogstats utility (dormando)
+
   * New mogilefs.conf option: timeout (Robin H. Johnson)
 
   * Make --noverify a valid option for locate (Ask Bjoern Hansen)
