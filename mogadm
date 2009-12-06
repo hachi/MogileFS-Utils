@@ -13,7 +13,7 @@ my $usage = {
         des => "Check the state of the MogileFS world.",
     },
     stats => {
-        des => "Show MogileFS system statistics.",
+        des => "Show MogileFS system statistics.  (DEPRECIATED: use mogstats instead)",
     },
     settings => {
         des => "Change/list server settings.",
@@ -483,6 +483,7 @@ sub cmd_check {
 }
 
 sub cmd_stats {
+    fail("mogadm stats is deprecated by new 'mogstats' utility");
     print "Fetching statistics...\n";
     my $stats = stats()
         or fail("Can't fetch stats");
