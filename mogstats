@@ -3,7 +3,7 @@
 # TODO:
 # YAML display mode
 # timing output during fetch
-# support different db backends.
+# support different db backends better (something mildly generic).
 
 use strict;
 use warnings;
@@ -16,6 +16,7 @@ my %QUEUES = ( 1 => 'FSCK_QUEUE' );
 my %valid_stats = map { $_ => 1 } qw/devices fids files replication delete queue all/;
 
 my $DBH_CACHE = '';
+my $DB_TYPE = '';
 
 my %opts;
 
@@ -169,6 +170,16 @@ sub get_dbh {
         AutoCommit => 1,
         RaiseError => 1,
     }) or die "Failed to connect to database: " . DBI->errstr;
+    my $dsn = $opts{db_dsn};
+    if ($dsn =~ /^DBI:mysql:/i) {
+        $DB_TYPE = "MySQL";
+    } elsif ($dsn =~ /^DBI:SQLite:/i) {
+        $DB_TYPE = "SQLite";
+    } elsif ($dsn =~ /^DBI:Pg:/i) {
+        $DB_TYPE = "Postgres";
+    } else {
+        die "Unknown database type: $dsn";
+    }
     return $DBH_CACHE;
 }
 
@@ -387,7 +398,15 @@ sub stats_for_to_replicate {
 }
 
 # FIXME: This is obviously MySQL-only.
-sub unix_timestamp { "UNIX_TIMESTAMP()" }
+sub unix_timestamp { 
+    if ($DB_TYPE eq 'MySQL') {
+        return "UNIX_TIMESTAMP()";
+    } elsif ($DB_TYPE eq 'Postgres') {
+        return "EXTRACT(epoch FROM NOW())::int4";
+    } elsif ($DB_TYPE eq 'SQLite') {
+        return "strftime('%s','now')";
+    }
+}
 
 sub get_stats_files_per_devcount {
     my $dbh = get_dbh();
