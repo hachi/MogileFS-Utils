@@ -11,7 +11,7 @@ buildarch: noarch
 source:    MogileFS-Utils-%{version}.tar.gz
 autoreq:   no
 requires:  perl
-requires:  perl(MogileFS::Client) >= 1.08
+requires:  perl(MogileFS::Client) >= 1.10
 requires:  perl(Compress::Zlib)
 
 %description
