@@ -1,3 +1,5 @@
+2.15 -- 2009-12-05
+
   * Standalone mogstats utility (dormando)
 
   * New mogilefs.conf option: timeout (Robin H. Johnson)

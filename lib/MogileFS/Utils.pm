@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 package MogileFS::Utils;
 
-our $VERSION = '2.14';
+our $VERSION = '2.15';
 
 
 =head1 NAME
