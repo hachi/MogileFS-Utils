@@ -26,6 +26,9 @@ GetOptions(
         "help"       => \$opts{help},
         "verbose"    => \$opts{verbose},
         "stats=s"    => \$opts{stats},
+        "db_dsn=s"   => \$opts{db_dsn},
+        "db_user=s"  => \$opts{db_user},
+        "db_pass=s"  => \$opts{db_pass},
     ) or abort_with_usage();
 Getopt::Long::Configure("require_order", "no_pass_through");
 
