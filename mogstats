@@ -95,16 +95,21 @@ sub cmd_stats {
 
     if ($args{files} || $args{all}) {
         print "\nStatistics for files...\n";
-        printf "  %-20s %-10s %10s\n", 'domain', 'class', 'files';
-        printf "  -------------------- ----------- ----------\n";
+        printf "  %-20s %-10s %10s %11s %13s\n", 'domain', 'class', 'files',
+            'size (m)', 'fullsize (m)';
+        printf "  -------------------- ----------- ---------- ----------- -------------\n";
         foreach my $domain (sort keys %{$stats->{files}}) {
             my $classes = $stats->{files}->{$domain};
             foreach my $class (sort keys %$classes) {
-                my $files = $classes->{$class};
-                printf "  %-20s %-10s %10s\n", $domain, $class, $files;
+                my $stat = $classes->{$class};
+                my $files = $stat->[2];
+                my $size  = int($stat->[3] / 1024 / 1024);
+                my $total = int($stat->[4] / 1024 / 1024);
+                printf "  %-20s %-10s %10s %11s %13s\n", $domain, $class,
+                    $files, $size, $total;
             }
         }
-        printf "  -------------------- ----------- ----------\n";
+        printf "  -------------------- ----------- ---------- ----------- -------------\n";
     }
 
     if ($args{replication} || $args{all}) {
@@ -285,12 +290,12 @@ sub stats_for_files {
     my $dbh = get_dbh() or die "Could not get database handle";
 
     verbose("... files stats...");
-    my $stats = $dbh->selectall_arrayref('SELECT dmid, classid, COUNT(classid) FROM file GROUP BY 1, 2');
+    my $stats = $dbh->selectall_arrayref('SELECT dmid, classid, COUNT(classid), sum(length), sum(length * devcount) FROM file GROUP BY 1, 2');
     my $files = {};
     for my $stat (@$stats) {
         my $domain  = $classes{$stat->[0]}->{name};
         my $class   = $classes{$stat->[0]}->{classes}->{$stat->[1]};
-        $files->{$domain}->{$class} = $stat->[2];
+        $files->{$domain}->{$class} = $stat;
     }
     verbose("... done");
     return $files;
