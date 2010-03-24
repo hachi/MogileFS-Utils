@@ -13,7 +13,7 @@ use Getopt::Long;
 # FIXME: decide how to share constants between utils and server.
 use constant ENDOFTIME => 2147483647;
 my %QUEUES = ( 1 => 'FSCK_QUEUE' );
-my %valid_stats = map { $_ => 1 } qw/devices fids files replication delete queue all/;
+my %valid_stats = map { $_ => 1 } qw/devices fids files replication replication-queue delete-queue general-queues all/;
 
 my $DBH_CACHE = '';
 my $DB_TYPE = '';
@@ -122,7 +122,9 @@ sub cmd_stats {
             }
         }
         printf "  -------------------- ----------- ---------- ----------\n";
-        # Now new stats.
+    }
+    # Now new stats.
+    if ($args{'replication-queue'} || $args{all}) {
         print "\nStatistics for replication queue...\n";
         printf "  %-20s %12s\n", 'status', 'count';
         printf "  -------------------- ------------\n";
@@ -134,7 +136,7 @@ sub cmd_stats {
 
     }
 
-    if ($args{'delete'} || $args{all}) {
+    if ($args{'delete-queue'} || $args{all}) {
         print "\nStatistics for delete queue...\n";
         printf "  %-20s %12s\n", 'status', 'count';
         printf "  -------------------- ------------\n";
@@ -146,7 +148,7 @@ sub cmd_stats {
 
     }
 
-    if ($args{queue} || $args{all}) {
+    if ($args{'general-queues'} || $args{all}) {
         print "\nStatistics for general queues...\n";
         printf "  %-15s %-20s %12s\n", 'queue', 'status', 'count';
         printf "  --------------- -------------------- ------------\n";
@@ -217,10 +219,15 @@ sub stats_from_db {
     # if they want replication counts, or didn't specify what they wanted
     if ($args->{replication} || $args->{all}) {
         $ret->{replication}  = stats_for_replication(\%globals);
+    }
+
+    # Stats about the replication queue (deferred, overdue)
+    if ($args->{'replication-queue'} || $args->{all}) {
         $ret->{to_replicate} = stats_for_to_replicate(\%globals);
     }
 
-    if ($args->{'delete'} || $args->{all}) {
+    # Stats about the delete queue (deferred, overdue)
+    if ($args->{'delete-queue'} || $args->{all}) {
         $ret->{to_delete} = stats_for_to_delete(\%globals);
     }
 
@@ -242,7 +249,7 @@ sub stats_from_db {
         verbose("... done");
     }
 
-    if ($args->{queue} || $args->{all}) {
+    if ($args->{'general-queues'} || $args->{all}) {
         $ret->{queue} = stats_for_to_queue(\%globals);
     }
 
