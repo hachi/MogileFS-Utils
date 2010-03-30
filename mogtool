@@ -1353,7 +1353,8 @@ sub list {
 }
 
 sub listkey {
-    my $key_pattern = shift(@ARGV) || '';
+    my $key_pattern = shift @ARGV;
+    $key_pattern    = '' unless defined $key_pattern;
 
     # list all files matching a key
     my ($ct, $after, $list);
