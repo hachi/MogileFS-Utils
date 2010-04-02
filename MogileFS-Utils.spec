@@ -1,6 +1,6 @@
 name:      MogileFS-Utils
 summary:   MogileFS-Utils - MogileFS utilities.
-version:   2.15
+version:   2.16
 release:   1
 vendor:    Alan Kasindorf <dormando@rydia.net>
 packager:  Jonathan Steinert <rpm@hachi.kuiki.net>
