@@ -158,6 +158,7 @@ my $usage = {
                     "<domain>" => "Domain to add class to.",
                     "<class>"  => "Name of class to add.",
                     "--mindevcount=i" => "Minimum number of replicas.",
+                    "--replpolicy=s" => "Replication policy string.",
                 },
             },
             modify => {
@@ -167,6 +168,7 @@ my $usage = {
                     "<domain>" => "Domain to add class to.",
                     "<class>"  => "Name of class to add.",
                     "--mindevcount=i" => "Minimum number of replicas.",
+                    "--replpolicy=s" => "Replication policy string.",
                 },
             },
             delete => {
@@ -631,13 +633,14 @@ sub cmd_domain_list {
     # actually lists domains and classes
     my $domains = domains() or
         fail_text('no_domains');
-
     # now iterate
-    printf " %-20s %-20s \%s\n", "domain", "class", "mindevcount";
-    printf "%-20s %-20s \%s\n", '-' x 20, '-' x 20, '-' x 13;
+    printf " %-20s %-20s %-12s  %-12s\n", "domain", "class", "mindevcount", "replpolicy";
+    printf "%-20s %-20s %-12s %-12s\n", '-' x 20, '-' x 20, '-' x 13, '-' x 12;
     foreach my $domain (sort keys %$domains) {
         foreach my $class (sort keys %{$domains->{$domain}}) {
-            printf " %-20s %-20s      %d\n", $domain, $class, $domains->{$domain}->{$class} || 0;
+            my $dom = $domains->{$domain}->{$class};
+            printf " %-20s %-20s      %-8d %-13s\n", $domain, $class,
+                $dom->{mindevcount} || 0, $dom->{replpolicy} || '';
         }
         print "\n";
     }
@@ -694,17 +697,18 @@ sub cmd_class_add {
     my $domains = domains() or
         fail_text('no_domains');
 
-    my $domain = $args->{domain};
-    my $class  = $args->{class};
+    my $domain = delete $args->{domain};
+    my $class  = delete $args->{class};
 
     cmd_help_die() unless $domain && $class;
     fail('Domain not found.') unless $domains->{$domain};
     fail('Class already exists.') if $domains->{$domain}->{$class};
 
     $args->{mindevcount} ||= 2;
+    $args->{replpolicy}  ||= '';
 
     my $mogadm = mogadm();
-    $mogadm->create_class($domain, $class, $args->{mindevcount});
+    $mogadm->create_class($domain, $class, $args);
     if ($mogadm->err) {
         fail('Error creating class: ' . $mogadm->errstr);
     }
@@ -717,17 +721,18 @@ sub cmd_class_modify {
     my $domains = domains() or
         fail_text('no_domains');
 
-    my $domain = $args->{domain};
-    my $class  = $args->{class};
+    my $domain = delete $args->{domain};
+    my $class  = delete $args->{class};
 
     cmd_help_die() unless $domain && $class;
     fail('Domain not found.') unless $domains->{$domain};
     fail('Class does not exist.') unless $domains->{$domain}->{$class};
 
     $args->{mindevcount} ||= 2;
+    $args->{replpolicy}  ||= '';
 
     my $mogadm = mogadm();
-    $mogadm->update_class($domain, $class, $args->{mindevcount});
+    $mogadm->update_class($domain, $class, $args);
     if ($mogadm->err) {
         fail('Error updating class: ' . $mogadm->errstr);
     }
@@ -1531,6 +1536,11 @@ integer.
 Number of devices the files in this class should be replicated across.  Can be
 set to anything >= 1.
 
+=item B<--replpolicy=E<lt>valueE<gt>>
+
+Stringified replication policy. ie "MultipleHosts(3)" is equivalent to a
+--mindevcount=3. See documentation or plugins on alternative policies.
+
 =back
 
 =head1 FSCK OPTIONS
@@ -1577,7 +1587,9 @@ Class manipulation
     $ mogadm class list
     $ mogadm class add first.domain my.class
     $ mogadm class add first.domain my.class --mindevcount=3
+    $ mogadm class add first.domain my.class --replpolicy="MultipleHosts(3)"
     $ mogadm class modify first.domain my.class --mindevcount=2
+    $ mogadm class modify first.domain my.class --replpolicy="MultipleHosts(3)"
     $ mogadm class delete first.domain my.class
 
 Check the status of your entire MogileFS system:
