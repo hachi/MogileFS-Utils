@@ -13,7 +13,7 @@ use Getopt::Long;
 # FIXME: decide how to share constants between utils and server.
 use constant ENDOFTIME => 2147483647;
 my %QUEUES = ( 1 => 'FSCK_QUEUE' );
-my %valid_stats = map { $_ => 1 } qw/devices fids files replication replication-queue delete-queue general-queues all/;
+my %valid_stats = map { $_ => 1 } qw/devices fids files domains replication replication-queue delete-queue general-queues all/;
 
 my $DBH_CACHE = '';
 my $DB_TYPE = '';
@@ -110,6 +110,20 @@ sub cmd_stats {
             }
         }
         printf "  -------------------- ----------- ---------- ----------- -------------\n";
+    }
+
+    if ($args{domains} && !($args{files} || $args{all})) {
+        print "\nStatistics for domains...\n";
+        printf "  %-20s %-10s %10s\n", 'domain', 'class', 'files';
+        printf "  -------------------- ----------- ----------\n";
+        foreach my $domain (sort keys %{$stats->{domains}}) {
+            my $classes = $stats->{domains}->{$domain};
+            foreach my $class (sort keys %$classes) {
+                my $files = $classes->{$class};
+                printf "  %-20s %-10s %10s\n", $domain, $class, $files;
+            }
+        }
+        printf "  -------------------- ----------- ----------\n";
     }
 
     if ($args{replication} || $args{all}) {
@@ -241,6 +255,11 @@ sub stats_from_db {
         $ret->{files} = stats_for_files(\%globals);
     }
 
+    # domain statistics (how many files per domain, faster than file stats)
+    if ($args->{domains} && !($args->{files} || $args->{all})) {
+        $ret->{domains} = stats_for_domains(\%globals);
+    }
+
     # device statistics (how many files are on each device)
     if ($args->{devices} || $args->{all}) {
         $ret->{devices} = stats_for_devices(\%globals);
@@ -296,6 +315,24 @@ sub stats_for_files {
         my $domain  = $classes{$stat->[0]}->{name};
         my $class   = $classes{$stat->[0]}->{classes}->{$stat->[1]};
         $files->{$domain}->{$class} = $stat;
+    }
+    verbose("... done");
+    return $files;
+}
+
+sub stats_for_domains {
+    my $globals = shift;
+    my %classes = %{$globals->{classes}};
+    my %devices = %{$globals->{devices}};
+    my $dbh = get_dbh() or die "Could not get database handle";
+
+    verbose("... domains stats...");
+    my $stats = $dbh->selectall_arrayref('SELECT dmid, classid, COUNT(classid) FROM file GROUP BY 1, 2');
+    my $files = {};
+    for my $stat (@$stats) {
+        my $domain  = $classes{$stat->[0]}->{name};
+        my $class   = $classes{$stat->[0]}->{classes}->{$stat->[1]};
+        $files->{$domain}->{$class} = $stat->[2];
     }
     verbose("... done");
     return $files;
