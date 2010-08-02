@@ -1027,7 +1027,7 @@ MSG
                 error("FAILURE: chunk $num has no paths at all.", ERR_FATAL);
             }
 
-            if (scalar(@npaths) >= 2) {
+            if (scalar(@npaths) >= 2 || $opts{noreplwait}) {
                 # okay, this one's replicated, actually verify the paths
                 foreach my $path (@npaths) {
                     if ($opts{verify}) {
