@@ -7,7 +7,7 @@ use Getopt::Long;
 use LWP::Simple;  # FIXME: use of this makes 'mog check' hang too long when multiple things down
 use Socket;
 
-my @topcmds = qw(check stats host device domain class slave fsck settings);
+my @topcmds = qw(check stats host device domain class slave fsck rebalance settings);
 my $usage = {
     check => {
         des => "Check the state of the MogileFS world.",
