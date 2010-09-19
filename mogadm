@@ -945,11 +945,11 @@ sub cmd_rebalance_test {
     my $s = $mogadm->server_settings;
     print "Policy: ", $s->{rebal_policy}, "\n\n";
     print "Source devices:\n";
-    for my $dev (split /,/, $res->{sdevs}) {
+    for my $dev (sort split /,/, $res->{sdevs}) {
         print " - ", $dev, "\n";
     }
     print "Destination devices:\n";
-    for my $dev (split /,/, $res->{ddevs}) {
+    for my $dev (sort split /,/, $res->{ddevs}) {
         print " - ", $dev, "\n";
     }
 }
@@ -957,9 +957,15 @@ sub cmd_rebalance_test {
 sub cmd_rebalance_status {
     my $mogadm = mogadm();
 
+    my $ss  = $mogadm->server_settings or fail ($mogadm->errstr);
     my $res = $mogadm->rebalance_status or fail ($mogadm->errstr);
+    if ($ss->{rebal_host}) {
+        print "Rebalance is running\n";
+    } else {
+        print "Rebalance is stopped\n";
+    }
     print "Rebalance status:\n";
-    for my $o (split /\s+/, $res->{state}) {
+    for my $o (sort split /\s+/, $res->{state}) {
         my ($k, $v) = split /=/, $o;
         printf("%25s = %-s\n", $k, $v);
     }
