@@ -212,6 +212,33 @@ my $usage = {
             },
         },
     },
+    rebalance => {
+        des => "Control file rebalancing operations.",
+        subcmd => {
+            start => {
+                des => 'Start a rebalance job',
+            },
+            stop => {
+                des => 'Stop a rebalance job',
+            },
+            status => {
+                des => 'Show status of current rebalance job',
+            },
+            settings => {
+                des => 'Display rebalance settings',
+            },
+            test => {
+                des => 'Show what devices the current policy would match',
+            },
+            policy => {
+                des => 'Add or adjust the current policy',
+                args => '[opts]',
+                opts => {
+                    '--options=s' => "Policy string (see docs/wiki for details)",
+                },
+            },
+        },
+    },
     fsck => {
         des => "Control a background filesystem check operation.",
         subcmd => {
@@ -938,6 +965,69 @@ sub cmd_slave_delete {
     }
 }
 
+sub cmd_rebalance_start {
+    my $mogadm = mogadm();
+    my $res = $mogadm->rebalance_start || fail($mogadm->errstr);
+    ok("rebalance started");
+}
+
+sub cmd_rebalance_stop {
+    my $mogadm = mogadm();
+    my $res = $mogadm->rebalance_stop || fail($mogadm->errstr);
+    ok("rebalance stopped");
+}
+
+# TODO: Make output prettier? Put hostname next to device name, print device
+# info?
+sub cmd_rebalance_test {
+    my $mogadm = mogadm();
+    my $res = $mogadm->rebalance_test || fail($mogadm->errstr);
+    print "Tested rebalance policy...\n";
+    my $s = $mogadm->server_settings;
+    print "Policy: ", $s->{rebal_policy}, "\n\n";
+    print "Source devices:\n";
+    for my $dev (split /,/, $res->{sdevs}) {
+        print " - ", $dev, "\n";
+    }
+    print "Destination devices:\n";
+    for my $dev (split /,/, $res->{ddevs}) {
+        print " - ", $dev, "\n";
+    }
+}
+
+sub cmd_rebalance_status {
+    my $mogadm = mogadm();
+
+    my $res = $mogadm->rebalance_status or fail ($mogadm->errstr);
+    print "Rebalance status:\n";
+    for my $o (split /\s+/, $res->{state}) {
+        my ($k, $v) = split /=/, $o;
+        printf("%25s = %-s\n", $k, $v);
+    }
+}
+
+sub cmd_rebalance_policy {
+    my $mogadm = mogadm();
+    my $args   = shift;
+
+    my $res = $mogadm->rebalance_set_policy(policy => $args->{options})
+        or fail($mogadm->errstr);
+
+    ok("changed policy setting");
+}
+
+sub cmd_rebalance_settings {
+    my $mogadm = mogadm();
+
+    my $ss = $mogadm->server_settings
+        or fail("can't get settings");
+    foreach my $k (sort keys %$ss) {
+        next unless ($k =~ '^rebal_');
+        next if ($k eq 'rebal_state');
+        printf("%25s = %-s\n", $k, $ss->{$k});
+    }
+}
+
 sub cmd_fsck_start {
     my $mogadm = mogadm();
     my $res = $mogadm->fsck_start || fail($mogadm->errstr);
@@ -1070,6 +1160,8 @@ sub cmd_settings_list {
     my $ss = $mogadm->server_settings
         or fail("can't get settings");
     foreach my $k (sort keys %$ss) {
+        # Don't list noisy "setting"
+        next if ($k =~ '^rebal');
         printf("%25s = %-s\n", $k, $ss->{$k});
     }
 }
