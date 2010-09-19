@@ -12,6 +12,6 @@ WriteMakefile(
     PREREQ_PM                   => {
         'LWP::Simple'      => 0,
         'Compress::Zlib'   => 0,
-        'MogileFS::Client' => '1.11',
+        'MogileFS::Client' => '1.13',
     },
 );
