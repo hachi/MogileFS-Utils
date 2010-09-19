@@ -969,7 +969,7 @@ sub cmd_rebalance_policy {
     my $mogadm = mogadm();
     my $args   = shift;
 
-    my $res = $mogadm->rebalance_set_policy(policy => $args->{options})
+    my $res = $mogadm->rebalance_set_policy($args->{options})
         or fail($mogadm->errstr);
 
     ok("changed policy setting");
